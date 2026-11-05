@@ -683,6 +683,7 @@ async def test_admin_daily_stats_users_and_presentations(db):
 
     pres = await svc.admin_daily_stats(db, "presentations", days=7)
     assert pres["today"] == 2 and pres["total"] == 2
+    assert pres["all_time"] == 2  # общий счётчик за всё время
 
     # откат при неудачной генерации убирает факт из статистики
     await svc.release_presentation(db, u1)

@@ -1569,11 +1569,15 @@ async function adminMetricScreen({ metric }) {
       <div class="bar"><span style="width:${pct}%"></span></div>
     </div>`;
   }).join("");
+  const allTime = (d.all_time != null)
+    ? `<div class="stat"><span class="muted small">Всего за всё время</span><b>${meta.fmt(d.all_time)}${meta.unit}</b></div>`
+    : "";
   render(`
     <h1>${meta.title}</h1>
     <div class="stats">
       <div class="stat"><span class="muted small">${meta.today}</span><b>${meta.fmt(d.today)}${meta.unit}</b></div>
       <div class="stat"><span class="muted small">За 30 дней</span><b>${meta.fmt(d.total)}${meta.unit}</b></div>
+      ${allTime}
     </div>
     <h2>По дням</h2>
     <div class="daylist">${rows}</div>

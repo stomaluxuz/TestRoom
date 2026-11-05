@@ -1424,13 +1424,18 @@ async def admin_daily_stats(db: AsyncSession, metric: str, days: int = 30) -> di
         {"date": (start_local + timedelta(days=i)).isoformat(), "value": buckets.get(start_local + timedelta(days=i), 0)}
         for i in range(days)
     ]
-    return {
+    result = {
         "metric": metric,
         "days": days,
         "series": series,
         "total": sum(x["value"] for x in series),
         "today": series[-1]["value"],
     }
+    # Для презентаций даём ещё и общий счётчик за всё время: разбивки по дням у старых
+    # презентаций нет (они создавались до появления журнала событий), но итог известен.
+    if metric == "presentations":
+        result["all_time"] = await db.scalar(select(func.coalesce(func.sum(User.pres_total), 0)))
+    return result
 
 
 async def list_teachers(db: AsyncSession) -> list[User]:
