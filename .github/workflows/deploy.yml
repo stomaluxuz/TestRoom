@@ -1,0 +1,52 @@
+name: Deploy to VPS
+
+# Автодеплой: любой push в main (или ручной запуск) выкатывает код на сервер.
+# Нужен один секрет репозитория: DEPLOY_SSH_KEY — приватный ключ деплоя (~/.ssh/testroom_deploy).
+# Остальные ключи (ANTHROPIC/VOYAGE/BOT_TOKEN) уже лежат в /opt/testroom/.env на сервере — их не трогаем.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Подготовить ключ SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::error::Секрет DEPLOY_SSH_KEY не задан. Добавьте его в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Загрузить код на сервер
+        run: |
+          tar -czf /tmp/upd.tar.gz --exclude='__pycache__' --exclude='*.pyc' app webapp requirements.txt guide
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no /tmp/upd.tar.gz root@212.47.58.69:/root/upd.tar.gz
+
+      - name: Развернуть и перезапустить
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@212.47.58.69 'bash -s' <<'EOF'
+          set -e
+          tar -xzf /root/upd.tar.gz -C /opt/testroom
+          /opt/testroom/.venv/bin/pip install -q -r /opt/testroom/requirements.txt
+          systemctl restart testroom
+          rm -f /root/upd.tar.gz
+          sleep 5
+          echo -n "health: "; curl -s -m 5 http://127.0.0.1:8080/health || echo "NO RESPONSE"
+          echo
+          echo -n "service: "; systemctl is-active testroom
+          (cd /opt/testroom && .venv/bin/python -m app.reindex) || echo "reindex: пропущен"
+          EOF
