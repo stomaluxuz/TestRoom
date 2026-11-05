@@ -655,3 +655,41 @@ async def test_admin_stats(db):
     await make_test(db, t, 2)
     s = await svc.admin_stats(db)
     assert s["teachers"] == 1 and s["tests"] == 1
+
+
+async def test_admin_daily_stats_users_and_presentations(db):
+    # сегодня добавились два пользователя и сделали две презентации
+    u1 = await make_student(db, 701)
+    await make_student(db, 702)
+    await svc.reserve_presentation(db, u1)
+    await svc.reserve_presentation(db, u1)
+
+    users = await svc.admin_daily_stats(db, "users", days=7)
+    assert len(users["series"]) == 7
+    assert users["series"][-1]["date"] == svc._local_today().isoformat()  # последний день — сегодня
+    assert users["today"] == 2 and users["total"] == 2
+
+    pres = await svc.admin_daily_stats(db, "presentations", days=7)
+    assert pres["today"] == 2 and pres["total"] == 2
+
+    # откат при неудачной генерации убирает факт из статистики
+    await svc.release_presentation(db, u1)
+    pres2 = await svc.admin_daily_stats(db, "presentations", days=7)
+    assert pres2["today"] == 1
+
+
+async def test_admin_daily_stats_revenue(db):
+    u = await make_student(db, 710)
+    top = await svc.create_topup(db, u.id, 5000)
+    # пока заявка в ожидании — дохода нет
+    rev0 = await svc.admin_daily_stats(db, "revenue", days=7)
+    assert rev0["today"] == 0
+    # после подтверждения сумма попадает в сегодняшний день
+    await svc.decide_topup(db, top.id, True, ADMIN_ID)
+    rev = await svc.admin_daily_stats(db, "revenue", days=7)
+    assert rev["today"] == 5000 and rev["total"] == 5000
+
+
+async def test_admin_daily_stats_bad_metric(db):
+    with pytest.raises(svc.ServiceError):
+        await svc.admin_daily_stats(db, "nope")

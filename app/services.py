@@ -23,6 +23,7 @@ from .models import (
     LibraryDoc,
     LibraryFigure,
     LibrarySubject,
+    PresentationEvent,
     Question,
     Subject,
     Test,
@@ -178,6 +179,7 @@ async def reserve_presentation(db: AsyncSession, user: User):
         user.pres_count = 0
     user.pres_count += 1
     user.pres_total = (user.pres_total or 0) + 1
+    db.add(PresentationEvent(user_id=user.id))  # для дневной статистики
     await db.commit()
 
 
@@ -189,6 +191,16 @@ async def release_presentation(db: AsyncSession, user: User):
         changed = True
     if user.pres_total and user.pres_total > 0:
         user.pres_total -= 1
+        changed = True
+    # откатываем и запись о событии (последнюю для этого пользователя)
+    last_id = await db.scalar(
+        select(PresentationEvent.id)
+        .where(PresentationEvent.user_id == user.id)
+        .order_by(PresentationEvent.id.desc())
+        .limit(1)
+    )
+    if last_id is not None:
+        await db.execute(delete(PresentationEvent).where(PresentationEvent.id == last_id))
         changed = True
     if changed:
         await db.commit()
@@ -1337,6 +1349,67 @@ async def admin_stats(db: AsyncSession) -> dict:
         "attempts_week": await db.scalar(
             select(func.count()).select_from(Attempt).where(Attempt.started_at >= week_ago)
         ),
+    }
+
+
+# Метрики с разбивкой по дням (клик по карточке в админке открывает детализацию).
+DAILY_METRICS = ("users", "revenue", "presentations")
+
+
+async def admin_daily_stats(db: AsyncSession, metric: str, days: int = 30) -> dict:
+    """Разбивка метрики по местным дням за последние `days` дней.
+
+    metric:
+      users         — сколько пользователей добавилось в этот день (User.created_at);
+      revenue        — сколько заработано в этот день (подтверждённые пополнения, по дате решения);
+      presentations  — сколько презентаций создано в этот день (PresentationEvent).
+
+    Возвращает ряд {date, value} по возрастанию дат и итог за период.
+    Группируем по местному дню в Python — это не зависит от типа БД и учитывает TZ_OFFSET_HOURS.
+    """
+    if metric not in DAILY_METRICS:
+        raise ServiceError("Неизвестная метрика.")
+    days = max(1, min(int(days or 30), 365))
+    off = timedelta(hours=settings.tz_offset_hours)
+    today = _local_today()
+    start_local = today - timedelta(days=days - 1)
+    # Самый ранний момент UTC, который попадает в день start_local (00:00 локального времени).
+    start_utc = datetime(start_local.year, start_local.month, start_local.day) - off
+
+    buckets: dict = {}
+
+    def bump(ts: datetime | None, value: int):
+        if ts is None or ts < start_utc:
+            return
+        d = (ts + off).date()
+        buckets[d] = buckets.get(d, 0) + value
+
+    if metric == "users":
+        for ts in (await db.scalars(select(User.created_at).where(User.created_at >= start_utc))).all():
+            bump(ts, 1)
+    elif metric == "presentations":
+        rows = await db.scalars(
+            select(PresentationEvent.created_at).where(PresentationEvent.created_at >= start_utc)
+        )
+        for ts in rows.all():
+            bump(ts, 1)
+    else:  # revenue
+        rows = await db.execute(
+            select(TopUp.decided_at, TopUp.created_at, TopUp.amount).where(TopUp.status == "approved")
+        )
+        for decided, created, amount in rows.all():
+            bump(decided or created, int(amount or 0))
+
+    series = [
+        {"date": (start_local + timedelta(days=i)).isoformat(), "value": buckets.get(start_local + timedelta(days=i), 0)}
+        for i in range(days)
+    ]
+    return {
+        "metric": metric,
+        "days": days,
+        "series": series,
+        "total": sum(x["value"] for x in series),
+        "today": series[-1]["value"],
     }
 
 

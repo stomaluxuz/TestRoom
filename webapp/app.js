@@ -33,6 +33,10 @@ function fmtDate(iso) {
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }) + " " +
          d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
+function fmtDay(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", weekday: "short" });
+}
 function clearTimers() { timers.forEach(clearInterval); timers = []; }
 function fmtSum(n) { return String(n | 0).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
 
@@ -1486,10 +1490,10 @@ async function adminScreen(params = {}) {
       <div class="stat"><span class="muted small">Преподавателей</span><b>${st.teachers}</b></div>
       <div class="stat"><span class="muted small">Заявок</span><b>${st.pending}</b></div>
       <div class="stat"><span class="muted small">Pro-подписок</span><b>${st.pro}</b></div>
-      <div class="stat"><span class="muted small">Пользователей</span><b>${st.users}</b></div>
+      <div class="stat tap" id="m-users"><span class="muted small">Пользователей ›</span><b>${st.users}</b></div>
       <div class="stat"><span class="muted small">📝 Тестов создано</span><b>${st.tests}</b></div>
-      <div class="stat"><span class="muted small">🖥 Презентаций всего</span><b>${st.presentations ?? 0}</b></div>
-      <div class="stat"><span class="muted small">💰 Заработано, сум</span><b>${fmtSum(st.revenue ?? 0)}</b></div>
+      <div class="stat tap" id="m-pres"><span class="muted small">🖥 Презентаций всего ›</span><b>${st.presentations ?? 0}</b></div>
+      <div class="stat tap" id="m-rev"><span class="muted small">💰 Заработано, сум ›</span><b>${fmtSum(st.revenue ?? 0)}</b></div>
       <div class="stat"><span class="muted small">🧾 Пополнений ждут</span><b>${st.topups_pending ?? 0}</b></div>
       <div class="stat"><span class="muted small">Запусков за сутки</span><b>${st.sessions_day}</b></div>
       <div class="stat"><span class="muted small">Прохождений за неделю</span><b>${st.attempts_week}</b></div>
@@ -1506,6 +1510,9 @@ async function adminScreen(params = {}) {
   on("#t3", "click", () => go(adminScreen, { tab: "pay" }, true));
   on("#t4", "click", () => go(adminScreen, { tab: "cast" }, true));
   on("#t5", "click", () => go(adminScreen, { tab: "lib" }, true));
+  on("#m-users", "click", () => go(adminMetricScreen, { metric: "users" }));
+  on("#m-pres", "click", () => go(adminMetricScreen, { metric: "presentations" }));
+  on("#m-rev", "click", () => go(adminMetricScreen, { metric: "revenue" }));
   const body = document.getElementById("body");
   if (tab === "pay") { await paymentsTab(body); return; }
   if (tab === "lib") { await libraryTab(body); return; }
@@ -1540,6 +1547,38 @@ async function adminScreen(params = {}) {
   let tmr;
   document.getElementById("q").addEventListener("input", e => { clearTimeout(tmr); tmr = setTimeout(() => load(e.target.value), 300); });
   load("");
+}
+
+const METRIC_META = {
+  users: { title: "👥 Пользователи", today: "Сегодня добавилось", unit: "", fmt: n => String(n), hint: "Сколько новых пользователей появлялось в каждый день." },
+  revenue: { title: "💰 Заработано", today: "Сегодня заработано", unit: " сум", fmt: n => fmtSum(n), hint: "Сумма подтверждённых пополнений по дню их подтверждения." },
+  presentations: { title: "🖥 Презентации", today: "Сегодня создано", unit: "", fmt: n => String(n), hint: "Сколько презентаций создано в каждый день. Факты записываются с момента обновления — более ранние дни могут быть пустыми." },
+};
+
+async function adminMetricScreen({ metric }) {
+  const meta = METRIC_META[metric];
+  if (!meta) return toast("Неизвестная метрика");
+  render(`<h1>${meta.title}</h1><div class="muted">Загрузка… <span class="spin"></span></div>`);
+  let d;
+  try { d = await api(`/api/admin/stats/daily?metric=${metric}&days=30`); } catch (e) { return toast(e.message); }
+  const max = Math.max(1, ...d.series.map(x => x.value));
+  const rows = d.series.slice().reverse().map(x => {
+    const pct = Math.round(x.value * 100 / max);
+    return `<div class="daystat">
+      <div class="drow"><span class="muted">${fmtDay(x.date)}</span><b>${meta.fmt(x.value)}${x.value ? meta.unit : ""}</b></div>
+      <div class="bar"><span style="width:${pct}%"></span></div>
+    </div>`;
+  }).join("");
+  render(`
+    <h1>${meta.title}</h1>
+    <div class="stats">
+      <div class="stat"><span class="muted small">${meta.today}</span><b>${meta.fmt(d.today)}${meta.unit}</b></div>
+      <div class="stat"><span class="muted small">За 30 дней</span><b>${meta.fmt(d.total)}${meta.unit}</b></div>
+    </div>
+    <h2>По дням</h2>
+    <div class="daylist">${rows}</div>
+    <p class="muted small">${meta.hint} День — по местному времени.</p>
+  `);
 }
 
 function broadcastTab(body) {

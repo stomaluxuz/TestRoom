@@ -608,6 +608,12 @@ def create_app() -> FastAPI:
     async def a_stats(admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
         return await svc.admin_stats(db)
 
+    @app.get("/api/admin/stats/daily")
+    async def a_stats_daily(
+        metric: str, days: int = 30, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)
+    ):
+        return await svc.admin_daily_stats(db, metric, days)
+
     @app.get("/api/admin/teachers")
     async def a_teachers(
         q: str = "", status: str = "all", admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)

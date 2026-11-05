@@ -189,6 +189,17 @@ class AdminLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
+class PresentationEvent(Base):
+    """Факт создания презентации — одна строка на каждую успешную генерацию.
+    Нужен для дневной статистики в админке (счётчик User.pres_total даты не хранит)."""
+
+    __tablename__ = "presentation_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class LibrarySubject(Base):
     """Предмет (раздел) электронной библиотеки. Фиксированный список, правит админ."""
 
