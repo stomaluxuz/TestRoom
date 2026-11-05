@@ -1490,10 +1490,10 @@ async function adminScreen(params = {}) {
       <div class="stat"><span class="muted small">Преподавателей</span><b>${st.teachers}</b></div>
       <div class="stat"><span class="muted small">Заявок</span><b>${st.pending}</b></div>
       <div class="stat"><span class="muted small">Pro-подписок</span><b>${st.pro}</b></div>
-      <div class="stat tap" id="m-users"><span class="muted small">Пользователей ›</span><b>${st.users}</b></div>
+      <div class="stat tap" id="m-users"><span class="muted small">👥 Пользователей сегодня ›</span><b>${st.users_today ?? 0}</b></div>
       <div class="stat"><span class="muted small">📝 Тестов создано</span><b>${st.tests}</b></div>
-      <div class="stat tap" id="m-pres"><span class="muted small">🖥 Презентаций всего ›</span><b>${st.presentations ?? 0}</b></div>
-      <div class="stat tap" id="m-rev"><span class="muted small">💰 Заработано, сум ›</span><b>${fmtSum(st.revenue ?? 0)}</b></div>
+      <div class="stat tap" id="m-pres"><span class="muted small">🖥 Презентаций сегодня ›</span><b>${st.presentations_today ?? 0}</b></div>
+      <div class="stat tap" id="m-rev"><span class="muted small">💰 Заработано сегодня, сум ›</span><b>${fmtSum(st.revenue_today ?? 0)}</b></div>
       <div class="stat"><span class="muted small">🧾 Пополнений ждут</span><b>${st.topups_pending ?? 0}</b></div>
       <div class="stat"><span class="muted small">Запусков за сутки</span><b>${st.sessions_day}</b></div>
       <div class="stat"><span class="muted small">Прохождений за неделю</span><b>${st.attempts_week}</b></div>

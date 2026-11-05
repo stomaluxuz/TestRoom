@@ -1319,9 +1319,17 @@ async def export_xlsx(db: AsyncSession, teacher: User, session_id: int) -> tuple
 
 # ---------------------------------------------------------------- админ
 
+def _today_start_utc() -> datetime:
+    """Начало сегодняшнего местного дня (00:00) в UTC — граница для метрик «за сегодня»."""
+    off = timedelta(hours=settings.tz_offset_hours)
+    today = _local_today()
+    return datetime(today.year, today.month, today.day) - off
+
+
 async def admin_stats(db: AsyncSession) -> dict:
     day_ago = utcnow() - timedelta(days=1)
     week_ago = utcnow() - timedelta(days=7)
+    today_start = _today_start_utc()
     return {
         "users": await db.scalar(select(func.count()).select_from(User)),
         "teachers": await db.scalar(select(func.count()).select_from(User).where(User.role == "teacher")),
@@ -1348,6 +1356,18 @@ async def admin_stats(db: AsyncSession) -> dict:
         ),
         "attempts_week": await db.scalar(
             select(func.count()).select_from(Attempt).where(Attempt.started_at >= week_ago)
+        ),
+        # Значения «за сегодня» для главного экрана админки (детализация по дням — в карточках).
+        "users_today": await db.scalar(
+            select(func.count()).select_from(User).where(User.created_at >= today_start)
+        ),
+        "presentations_today": await db.scalar(
+            select(func.count()).select_from(PresentationEvent).where(PresentationEvent.created_at >= today_start)
+        ),
+        "revenue_today": await db.scalar(
+            select(func.coalesce(func.sum(TopUp.amount), 0)).where(
+                TopUp.status == "approved", TopUp.decided_at >= today_start
+            )
         ),
     }
 

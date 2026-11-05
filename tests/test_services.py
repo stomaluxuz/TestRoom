@@ -657,6 +657,18 @@ async def test_admin_stats(db):
     assert s["teachers"] == 1 and s["tests"] == 1
 
 
+async def test_admin_stats_today_fields(db):
+    u = await make_student(db, 720)
+    await svc.reserve_presentation(db, u)
+    top = await svc.create_topup(db, u.id, 3000)
+    await svc.decide_topup(db, top.id, True, ADMIN_ID)
+    s = await svc.admin_stats(db)
+    # на главном экране показываем «сегодня»: пользователь, презентация и доход за сегодня
+    assert s["users_today"] >= 1
+    assert s["presentations_today"] == 1
+    assert s["revenue_today"] == 3000
+
+
 async def test_admin_daily_stats_users_and_presentations(db):
     # сегодня добавились два пользователя и сделали две презентации
     u1 = await make_student(db, 701)
