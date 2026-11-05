@@ -1,0 +1,23 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+build/
+dist/
+*.spec
+tests/
+scratchpad/
+requirements-dev.txt
+run_all.py
+run_all.log
+standalone.py
+build_exe.bat
+# живая локальная база и её журналы — в образ не кладём (кроме seed.db)
+testbot.db
+testbot.db-wal
+testbot.db-shm
+*.sqlite
+.env

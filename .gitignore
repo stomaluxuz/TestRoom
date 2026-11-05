@@ -1,0 +1,42 @@
+# --- секреты и доступы (НИКОГДА не коммитить) ---
+.env
+.env.*
+!.env.example
+SERVER-ACCESS.txt
+*.pem
+*.key
+id_rsa*
+testroom_deploy*
+
+# --- базы и бэкапы (данные пользователей — не в репозиторий) ---
+*.db
+*.sqlite
+*.sqlite3
+server-backup/
+library/
+
+# --- окружение и кэш Python ---
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# --- логи и временные пометки ---
+*.log
+startbat_ran.txt
+
+# --- крупные/бинарные артефакты ---
+cloudflared.exe
+*.exe
+dist/
+build/
+
+# --- ОС/редакторы ---
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
