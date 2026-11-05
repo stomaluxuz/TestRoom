@@ -1369,11 +1369,17 @@ async def admin_stats(db: AsyncSession) -> dict:
                 TopUp.status == "approved", TopUp.decided_at >= today_start
             )
         ),
+        "tests_today": await db.scalar(
+            select(func.count()).select_from(Test).where(Test.created_at >= today_start)
+        ),
+        "sessions_today": await db.scalar(
+            select(func.count()).select_from(TestSession).where(TestSession.started_at >= today_start)
+        ),
     }
 
 
 # Метрики с разбивкой по дням (клик по карточке в админке открывает детализацию).
-DAILY_METRICS = ("users", "revenue", "presentations")
+DAILY_METRICS = ("users", "revenue", "presentations", "tests", "sessions")
 
 
 async def admin_daily_stats(db: AsyncSession, metric: str, days: int = 30) -> dict:
@@ -1382,7 +1388,9 @@ async def admin_daily_stats(db: AsyncSession, metric: str, days: int = 30) -> di
     metric:
       users         — сколько пользователей добавилось в этот день (User.created_at);
       revenue        — сколько заработано в этот день (подтверждённые пополнения, по дате решения);
-      presentations  — сколько презентаций создано в этот день (PresentationEvent).
+      presentations  — сколько презентаций создано в этот день (PresentationEvent);
+      tests          — сколько тестов создано в этот день (Test.created_at);
+      sessions       — сколько запусков тестов в этот день (TestSession.started_at).
 
     Возвращает ряд {date, value} по возрастанию дат и итог за период.
     Группируем по местному дню в Python — это не зависит от типа БД и учитывает TZ_OFFSET_HOURS.
@@ -1412,6 +1420,12 @@ async def admin_daily_stats(db: AsyncSession, metric: str, days: int = 30) -> di
             select(PresentationEvent.created_at).where(PresentationEvent.created_at >= start_utc)
         )
         for ts in rows.all():
+            bump(ts, 1)
+    elif metric == "tests":
+        for ts in (await db.scalars(select(Test.created_at).where(Test.created_at >= start_utc))).all():
+            bump(ts, 1)
+    elif metric == "sessions":
+        for ts in (await db.scalars(select(TestSession.started_at).where(TestSession.started_at >= start_utc))).all():
             bump(ts, 1)
     else:  # revenue
         rows = await db.execute(

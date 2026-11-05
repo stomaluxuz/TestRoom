@@ -1491,11 +1491,11 @@ async function adminScreen(params = {}) {
       <div class="stat"><span class="muted small">Заявок</span><b>${st.pending}</b></div>
       <div class="stat"><span class="muted small">Pro-подписок</span><b>${st.pro}</b></div>
       <div class="stat tap" id="m-users"><span class="muted small">👥 Пользователей сегодня ›</span><b>${st.users_today ?? 0}</b></div>
-      <div class="stat"><span class="muted small">📝 Тестов создано</span><b>${st.tests}</b></div>
+      <div class="stat tap" id="m-tests"><span class="muted small">📝 Тестов сегодня ›</span><b>${st.tests_today ?? 0}</b></div>
       <div class="stat tap" id="m-pres"><span class="muted small">🖥 Презентаций сегодня ›</span><b>${st.presentations_today ?? 0}</b></div>
       <div class="stat tap" id="m-rev"><span class="muted small">💰 Заработано сегодня, сум ›</span><b>${fmtSum(st.revenue_today ?? 0)}</b></div>
+      <div class="stat tap" id="m-sess"><span class="muted small">🚀 Запусков сегодня ›</span><b>${st.sessions_today ?? 0}</b></div>
       <div class="stat"><span class="muted small">🧾 Пополнений ждут</span><b>${st.topups_pending ?? 0}</b></div>
-      <div class="stat"><span class="muted small">Запусков за сутки</span><b>${st.sessions_day}</b></div>
       <div class="stat"><span class="muted small">Прохождений за неделю</span><b>${st.attempts_week}</b></div>
     </div>
     <div class="tabs"><button class="${tab === "teachers" ? "on" : ""}" id="t1">Преподаватели</button>
@@ -1511,8 +1511,10 @@ async function adminScreen(params = {}) {
   on("#t4", "click", () => go(adminScreen, { tab: "cast" }, true));
   on("#t5", "click", () => go(adminScreen, { tab: "lib" }, true));
   on("#m-users", "click", () => go(adminMetricScreen, { metric: "users" }));
+  on("#m-tests", "click", () => go(adminMetricScreen, { metric: "tests" }));
   on("#m-pres", "click", () => go(adminMetricScreen, { metric: "presentations" }));
   on("#m-rev", "click", () => go(adminMetricScreen, { metric: "revenue" }));
+  on("#m-sess", "click", () => go(adminMetricScreen, { metric: "sessions" }));
   const body = document.getElementById("body");
   if (tab === "pay") { await paymentsTab(body); return; }
   if (tab === "lib") { await libraryTab(body); return; }
@@ -1553,6 +1555,8 @@ const METRIC_META = {
   users: { title: "👥 Пользователи", today: "Сегодня добавилось", unit: "", fmt: n => String(n), hint: "Сколько новых пользователей появлялось в каждый день." },
   revenue: { title: "💰 Заработано", today: "Сегодня заработано", unit: " сум", fmt: n => fmtSum(n), hint: "Сумма подтверждённых пополнений по дню их подтверждения." },
   presentations: { title: "🖥 Презентации", today: "Сегодня создано", unit: "", fmt: n => String(n), hint: "Сколько презентаций создано в каждый день. Факты записываются с момента обновления — более ранние дни могут быть пустыми." },
+  tests: { title: "📝 Тесты", today: "Сегодня создано", unit: "", fmt: n => String(n), hint: "Сколько тестов создано в каждый день." },
+  sessions: { title: "🚀 Запуски тестов", today: "Сегодня запусков", unit: "", fmt: n => String(n), hint: "Сколько раз преподаватели запускали тесты в каждый день." },
 };
 
 async function adminMetricScreen({ metric }) {

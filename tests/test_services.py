@@ -703,6 +703,21 @@ async def test_admin_daily_stats_revenue(db):
     assert rev["today"] == 5000 and rev["total"] == 5000
 
 
+async def test_admin_daily_stats_tests_and_sessions(db):
+    t = await make_teacher(db)
+    test = await make_test(db, t, 3)
+    await svc.start_session(db, t, test.id, "101", 30, 3)
+
+    tests = await svc.admin_daily_stats(db, "tests", days=7)
+    assert tests["today"] == 1 and tests["total"] == 1
+
+    sess = await svc.admin_daily_stats(db, "sessions", days=7)
+    assert sess["today"] == 1 and sess["total"] == 1
+
+    s = await svc.admin_stats(db)
+    assert s["tests_today"] == 1 and s["sessions_today"] == 1
+
+
 async def test_admin_daily_stats_bad_metric(db):
     with pytest.raises(svc.ServiceError):
         await svc.admin_daily_stats(db, "nope")
