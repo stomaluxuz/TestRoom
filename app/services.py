@@ -22,6 +22,7 @@ from .models import (
     LibraryChunk,
     LibraryDoc,
     LibraryFigure,
+    LibraryProgress,
     LibrarySubject,
     PresentationEvent,
     Question,
@@ -1815,6 +1816,7 @@ async def get_library_doc(db: AsyncSession, doc_id: int, allow_pending: bool = F
     if d is None or (d.status != "approved" and not allow_pending):
         raise ServiceError("Материал не найден.", 404)
     subj = await db.get(LibrarySubject, d.subject_id)
+    is_pdf = (d.filename or "").lower().endswith(".pdf")
     return {
         "id": d.id,
         "title": d.title,
@@ -1823,9 +1825,39 @@ async def get_library_doc(db: AsyncSession, doc_id: int, allow_pending: bool = F
         "filename": d.filename,
         "size": d.size,
         "status": d.status,
-        "text": d.text or "",
+        "is_pdf": is_pdf,
+        # Для PDF текст не нужен (книга рисуется из файла), а он бывает на мегабайты —
+        # не тащим его в ответ, иначе открытие книги тормозит. Для DOCX/TXT текст отдаём.
+        "text": "" if is_pdf else (d.text or ""),
         "created_at": d.created_at.isoformat(),
     }
+
+
+async def get_library_progress(db: AsyncSession, user_id: int, doc_id: int) -> int:
+    """Страница, на которой читатель остановился (0 — не сохранялось)."""
+    page = await db.scalar(
+        select(LibraryProgress.page).where(
+            LibraryProgress.user_id == user_id, LibraryProgress.doc_id == doc_id
+        )
+    )
+    return int(page or 0)
+
+
+async def set_library_progress(db: AsyncSession, user_id: int, doc_id: int, page: int) -> int:
+    """Запомнить текущую страницу читателя в документе."""
+    page = max(1, int(page or 1))
+    row = await db.scalar(
+        select(LibraryProgress).where(
+            LibraryProgress.user_id == user_id, LibraryProgress.doc_id == doc_id
+        )
+    )
+    if row is None:
+        db.add(LibraryProgress(user_id=user_id, doc_id=doc_id, page=page))
+    else:
+        row.page = page
+        row.updated_at = utcnow()
+    await db.commit()
+    return page
 
 
 async def library_doc_file(db: AsyncSession, doc_id: int, allow_pending: bool = False) -> tuple[str, bytes]:

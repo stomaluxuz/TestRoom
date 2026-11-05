@@ -247,6 +247,10 @@ class LibraryDecideIn(BaseModel):
     approve: bool
 
 
+class ProgressIn(BaseModel):
+    page: int = Field(1, ge=1, le=100_000)
+
+
 # ---------------------------------------------------------------- приложение
 
 def create_app() -> FastAPI:
@@ -542,6 +546,18 @@ def create_app() -> FastAPI:
         media = mimetypes.guess_type(name)[0] or "application/octet-stream"
         # FileResponse сам поддерживает HTTP Range → PDF.js тянет только нужные страницы.
         return FileResponse(path, media_type=media, headers={"Cache-Control": "private, max-age=600"})
+
+    @app.get("/api/library/docs/{doc_id}/progress")
+    async def library_progress_get(
+        doc_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+    ):
+        return {"page": await svc.get_library_progress(db, user.id, doc_id)}
+
+    @app.post("/api/library/docs/{doc_id}/progress")
+    async def library_progress_set(
+        doc_id: int, body: ProgressIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+    ):
+        return {"page": await svc.set_library_progress(db, user.id, doc_id, body.page)}
 
     @app.get("/api/library/docs/{doc_id}/search")
     async def library_search(

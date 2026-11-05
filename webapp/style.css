@@ -57,6 +57,11 @@ h1.ell, h2.ell { display: block; }
 .pdfpos input { width: 56px; text-align: center; padding: 6px 4px; display: inline-block; }
 .pdfsearch { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .pdfsearch input { flex: 1; }
+.pdfzoom { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.pdfzoom #zlabel { min-width: 40px; text-align: center; color: var(--hint); }
+#pcanvas.zoomed { overflow-x: auto; -webkit-overflow-scrolling: touch; text-align: center; }
+#pcanvas.zoomed .pdfpage { max-width: none; }
+.pdfhint { text-align: center; margin: 8px 0 2px; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--bg2);
   border-top-color: var(--link); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }

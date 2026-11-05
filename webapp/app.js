@@ -655,12 +655,14 @@ async function openPdf(id) {
   const viewer = document.getElementById("viewer");
   if (!viewer) return;
   const total = pdf.numPages;
-  let cur = 1, rendering = false;
+  let cur = 1, rendering = false, zoom = 1;
+  const ZMIN = 1, ZMAX = 4;
   viewer.innerHTML = `
     <div class="pdfbar">
       <button class="mini" id="pprev">‹</button>
       <span class="pdfpos"><input id="pinput" type="number" min="1" max="${total}" value="1"> / ${total}</span>
       <button class="mini" id="pnext">›</button>
+      <span class="pdfzoom"><button class="mini" id="zout">−</button><span id="zlabel">100%</span><button class="mini" id="zin">+</button></span>
     </div>
     <div class="pdfsearch">
       <input id="psearch" placeholder="Поиск по книге (тема, слово)…">
@@ -668,8 +670,23 @@ async function openPdf(id) {
     </div>
     <div id="pfound"></div>
     <div id="pcanvas"><div class="muted small">${t("loading")} <span class="spin"></span></div></div>
+    <div class="muted small pdfhint">Листайте свайпом ← →, кнопками + / − меняйте размер. Страница запоминается.</div>
   `;
   const box = document.getElementById("pcanvas");
+  // Debounced-сохранение страницы: не дёргаем сервер на каждый свайп.
+  let saveTmr;
+  function saveProgress(n) {
+    clearTimeout(saveTmr);
+    saveTmr = setTimeout(() => {
+      api(`/api/library/docs/${id}/progress`, { json: { page: n } }).catch(() => {});
+    }, 800);
+  }
+  function setZoom(z) {
+    zoom = Math.max(ZMIN, Math.min(ZMAX, z));
+    const zl = document.getElementById("zlabel"); if (zl) zl.textContent = Math.round(zoom * 100) + "%";
+    box.classList.toggle("zoomed", zoom > 1);
+    show(cur);
+  }
   async function show(n) {
     n = Math.max(1, Math.min(total, (n | 0) || 1));
     cur = n;
@@ -680,21 +697,42 @@ async function openPdf(id) {
       const page = await pdf.getPage(n);
       const base = page.getViewport({ scale: 1 });
       const cssW = (box.clientWidth || 340) - 2;
-      const scale = Math.min(cssW / base.width, 2.5);
+      const fit = Math.min(cssW / base.width, 2.5);
+      const scale = fit * zoom;
       const vp = page.getViewport({ scale });
       const dpr = Math.min(window.devicePixelRatio || 1, 3); // чёткость на Retina
       const canvas = document.createElement("canvas");
       canvas.className = "pdfpage";
       canvas.width = Math.floor(vp.width * dpr);
       canvas.height = Math.floor(vp.height * dpr);
+      canvas.style.width = Math.floor(vp.width) + "px";
       await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null }).promise;
       box.innerHTML = ""; box.appendChild(canvas);
+      saveProgress(n);
     } catch (e) { box.innerHTML = `<span class="muted small">Не удалось показать страницу.</span>`; }
     finally { rendering = false; }
   }
   on("#pprev", "click", () => show(cur - 1));
   on("#pnext", "click", () => show(cur + 1));
+  on("#zin", "click", () => setZoom(zoom + 0.5));
+  on("#zout", "click", () => setZoom(zoom - 0.5));
   document.getElementById("pinput").addEventListener("change", e => show(+e.target.value));
+  // Свайп для перелистывания. Когда страница увеличена (zoom>1), жест отдаём
+  // горизонтальной прокрутке (панорамирование), а не перелистыванию.
+  let tx = 0, ty = 0, tm = false;
+  box.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) { tm = false; return; }
+    tx = e.touches[0].clientX; ty = e.touches[0].clientY; tm = true;
+  }, { passive: true });
+  box.addEventListener("touchend", e => {
+    if (!tm) return; tm = false;
+    const dx = e.changedTouches[0].clientX - tx;
+    const dy = e.changedTouches[0].clientY - ty;
+    if (zoom > 1) return;                       // увеличено — не листаем
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    show(dx < 0 ? cur + 1 : cur - 1);           // влево — вперёд, вправо — назад
+    haptic("light");
+  }, { passive: true });
   async function doSearch() {
     const q = document.getElementById("psearch").value.trim();
     const found = document.getElementById("pfound");
@@ -710,15 +748,19 @@ async function openPdf(id) {
   }
   on("#pfind", "click", doSearch);
   document.getElementById("psearch").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
-  show(1);
+  // Открываем на странице, где читатель остановился в прошлый раз.
+  let startPage = 1;
+  try { const p = await api(`/api/library/docs/${id}/progress`); if (p && p.page > 0) startPage = p.page; } catch (e) {}
+  show(startPage);
 }
 async function libraryDocScreen({ id }) {
   const L = libT();
   // Сразу показываем «Открываю… ⟳», чтобы не казалось, что приложение зависло, пока грузятся данные.
   render(`<div class="loader"><div class="spin big"></div><p class="muted">${L.opening}</p></div>`);
+  loadPdfJs().catch(() => {});  // грузим движок параллельно с метаданными — открытие быстрее
   let d;
   try { d = await api(`/api/library/docs/${id}`); } catch (e) { return toast(e.message); }
-  const isPdf = (d.filename || "").toLowerCase().endsWith(".pdf");
+  const isPdf = d.is_pdf != null ? d.is_pdf : (d.filename || "").toLowerCase().endsWith(".pdf");
   const canSend = (d.size || 0) <= 50 * 1024 * 1024; // Telegram не отдаёт файлы больше 50 МБ
   render(`
     <h1 class="ell">${esc(d.title)}</h1>

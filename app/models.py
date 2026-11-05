@@ -271,6 +271,19 @@ class LibraryFigure(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class LibraryProgress(Base):
+    """На какой странице читатель остановился в документе (запоминаем для каждого)."""
+
+    __tablename__ = "library_progress"
+    __table_args__ = (UniqueConstraint("user_id", "doc_id", name="uq_progress_user_doc"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    doc_id: Mapped[int] = mapped_column(ForeignKey("library_docs.id"), index=True)
+    page: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class AppSetting(Base):
     """Настройки, которые админ меняет на лету (цены, номер карты и т.п.) — ключ/значение."""
 
