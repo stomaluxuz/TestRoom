@@ -251,15 +251,38 @@ async def generate_test(topic: str, questions: int = 10) -> str:
     return await _ask(SYSTEM_TEST, prompt, max_tokens=8000)
 
 
-async def generate_test_questions(topic: str, count: int = 10, lang: str = "ru", context: str = ""):
+# Предел длины исходного материала, который отдаём модели (символов) — защита от перерасхода токенов.
+MAX_MATERIAL_CHARS = 24000
+
+
+def _material_block(material: str) -> str:
+    """Блок со СТРОГИМ материалом пользователя: вопросы только по нему, без домыслов."""
+    return (
+        "Ниже — материал, который прислал пользователь (текст, презентация или книга). "
+        "Составляй вопросы СТРОГО по этому материалу: бери только факты, определения, термины и "
+        "данные, которые в нём есть. НЕ добавляй сведения извне и НЕ выдумывай. Если материала не "
+        "хватает на нужное число вопросов — сделай меньше, это нормально.\n\n"
+        "=== МАТЕРИАЛ ===\n"
+        f"{material}\n"
+        "=== КОНЕЦ МАТЕРИАЛА ===\n\n"
+    )
+
+
+async def generate_test_questions(
+    topic: str, count: int = 10, lang: str = "ru", context: str = "", strict: bool = False
+):
     """Надёжно набирает нужное число вопросов: при нехватке дозапрашивает недостающие.
 
-    context — выдержки из библиотеки (RAG). Возвращает список ParsedQuestion."""
+    context — исходный материал: выдержки из библиотеки (RAG) или присланный пользователем текст.
+    strict=True — составлять вопросы ТОЛЬКО по материалу (для файлов/текста от пользователя),
+    не дополняя общими знаниями. Возвращает список ParsedQuestion."""
     from .parsers import parse_text
 
     topic = " ".join((topic or "").split())
-    if not topic:
+    if not topic and not (strict and context):
         raise _err("Напишите тему теста.")
+    if context and len(context) > MAX_MATERIAL_CHARS:
+        context = context[:MAX_MATERIAL_CHARS]
     count = max(1, min(int(count or 10), 40))
     collected = []
     for attempt in range(3):
@@ -267,12 +290,23 @@ async def generate_test_questions(topic: str, count: int = 10, lang: str = "ru",
         if need <= 0:
             break
         again = " Не повторяй уже заданные вопросы, придумай новые." if attempt else ""
-        prompt = (
-            f"{_context_block(context) if attempt == 0 else ''}"
-            f"Составь РОВНО {need} вопросов теста по теме «{topic}». "
-            f"У каждого ровно 4 варианта, правильный один — отмечен звёздочкой.{again}\n"
-            f"{_lang_instr(lang)}"
-        )
+        if strict and context:
+            head = _material_block(context) if attempt == 0 else "Используй только присланный выше материал. "
+            about = f"по теме «{topic}» " if topic else ""
+            prompt = (
+                f"{head}"
+                f"Составь до {need} вопросов теста {about}СТРОГО по этому материалу. "
+                f"У каждого ровно 4 варианта, правильный один — отмечен звёздочкой. "
+                f"Если материала не хватает — сделай меньше, не выдумывай.{again}\n"
+                f"{_lang_instr(lang)}"
+            )
+        else:
+            prompt = (
+                f"{_context_block(context) if attempt == 0 else ''}"
+                f"Составь РОВНО {need} вопросов теста по теме «{topic}». "
+                f"У каждого ровно 4 варианта, правильный один — отмечен звёздочкой.{again}\n"
+                f"{_lang_instr(lang)}"
+            )
         text = await _ask(SYSTEM_TEST, prompt, max_tokens=8000)
         collected += parse_text(text).questions
     return collected[:count]

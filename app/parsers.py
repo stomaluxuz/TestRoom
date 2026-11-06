@@ -241,6 +241,40 @@ def pdf_to_text(data: bytes) -> str:
     return "\n".join(parts)
 
 
+def pptx_to_text(data: bytes) -> str:
+    """Текст из презентации PowerPoint (.pptx): собираем надписи, таблицы и заметки со всех слайдов."""
+    try:
+        from pptx import Presentation
+
+        prs = Presentation(io.BytesIO(data))
+    except Exception as e:
+        raise ParseFailed("Не удалось открыть файл PowerPoint (.pptx).") from e
+    lines: list[str] = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            try:
+                if shape.has_text_frame:
+                    for p in shape.text_frame.paragraphs:
+                        txt = "".join(r.text for r in p.runs) or (p.text or "")
+                        if txt.strip():
+                            lines.append(txt)
+                if shape.has_table:
+                    for row in shape.table.rows:
+                        for cell in row.cells:
+                            if cell.text and cell.text.strip():
+                                lines.append(cell.text)
+            except Exception:
+                continue
+        try:
+            if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+                note = slide.notes_slide.notes_text_frame.text
+                if note and note.strip():
+                    lines.append(note)
+        except Exception:
+            pass
+    return "\n".join(lines)
+
+
 def extract_document_text_path(filename: str, path: str) -> str:
     """Как extract_document_text, но читает файл с диска (PDF — не загружая целиком в память)."""
     name = (filename or "").lower()
@@ -269,6 +303,8 @@ def extract_document_text(filename: str, data: bytes) -> str:
         return pdf_to_text(data)
     if name.endswith(".docx"):
         return docx_to_text(data)
+    if name.endswith(".pptx"):
+        return pptx_to_text(data)
     if name.endswith((".txt", ".md")):
         for enc in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
             try:
@@ -276,7 +312,7 @@ def extract_document_text(filename: str, data: bytes) -> str:
             except UnicodeDecodeError:
                 continue
         return data.decode("utf-8", errors="ignore")
-    raise ParseFailed("Поддерживаются файлы .pdf, .docx и .txt.")
+    raise ParseFailed("Поддерживаются файлы .pdf, .docx, .pptx и .txt.")
 
 
 def _answer_index(value, options: list[str]) -> int | None:

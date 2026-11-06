@@ -1,6 +1,7 @@
 """Telegram-бот: регистрация, заявки преподавателей, загрузка тестов, админ-команды."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from html import escape
@@ -31,7 +32,15 @@ from . import db as dbmod
 from . import services as svc
 from .config import settings
 from .models import Attempt, Test, TestSession, User
-from .parsers import TEMPLATE_TXT, ParsedQuestion, ParseFailed, parse_file, template_docx, template_xlsx
+from .parsers import (
+    TEMPLATE_TXT,
+    ParsedQuestion,
+    ParseFailed,
+    extract_document_text,
+    parse_file,
+    template_docx,
+    template_xlsx,
+)
 from .ai import generate_slides, generate_test_questions
 from .present import PRESENT_EXAMPLE, build_presentation, build_pptx, build_test_docx
 from .universities import UNIVERSITIES
@@ -356,15 +365,75 @@ async def make_test_start(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
     await state.set_state(MakeTest.topic)
     hint = f"\n\n💳 Стоимость: {_money(price)} (спишется с баланса при создании)." if price else ""
-    await _say(message, "📝 Напишите <b>тему теста</b> (например: «Кариес» или «Кости черепа»)." + hint)
+    await _say(
+        message,
+        "📝 Напишите <b>тему теста</b> (например: «Кариес» или «Кости черепа»).\n"
+        "Или пришлите <b>файл</b> (PDF, Word, PowerPoint, TXT) либо вставьте <b>текст</b> — "
+        "тогда составлю вопросы <b>строго по вашему материалу</b>." + hint,
+    )
+
+
+# Порог: длинный текст считаем прикреплённым материалом, а не темой.
+MATERIAL_TEXT_MIN = 400
+MATERIAL_EXT = (".pdf", ".docx", ".pptx", ".txt")
 
 
 @router.message(MakeTest.topic, F.text)
 async def make_test_topic(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
-    await state.update_data(topic=message.text.strip())
+    txt = (message.text or "").strip()
+    if len(txt) >= MATERIAL_TEXT_MIN:
+        # Пользователь вставил содержание темы — делаем тест строго по нему.
+        await state.update_data(topic=_short_title(txt), material=txt, strict=True)
+        note = "📄 Принял текст как материал — составлю строго по нему. "
+    else:
+        await state.update_data(topic=txt, material="", strict=False)
+        note = ""
     await state.set_state(MakeTest.lang)
-    await _say(message, "На каком <b>языке</b> составить тест?", reply_markup=lang_kb("tlang"))
+    await _say(message, note + "На каком <b>языке</b> составить тест?", reply_markup=lang_kb("tlang"))
+
+
+@router.message(MakeTest.topic, F.document)
+async def make_test_material_file(message: Message, state: FSMContext, bot: Bot):
+    """В шаге выбора темы можно прислать файл (PDF/Word/PowerPoint/TXT) как материал для теста."""
+    _remember(message.chat.id, message.message_id)
+    name = message.document.file_name or ""
+    if not name.lower().endswith(MATERIAL_EXT):
+        return await _say(
+            message,
+            "Пришлите файл <b>.pdf</b>, <b>.docx</b>, <b>.pptx</b> или <b>.txt</b> — "
+            "или напишите тему текстом.",
+        )
+    if (message.document.file_size or 0) > 10 * 1024 * 1024:
+        return await _say(message, "Файл больше 10 МБ.")
+    wait = await _say(message, "⏳ Читаю файл…")
+    try:
+        buf = await bot.download(message.document.file_id)
+        text = await asyncio.to_thread(extract_document_text, name, buf.read())
+    except ParseFailed as e:
+        return await _say(message, "❌ " + escape(str(e)))
+    except Exception:
+        return await _say(message, "❌ Не удалось прочитать файл. Пришлите другой или напишите тему.")
+    finally:
+        try:
+            await wait.delete()
+        except Exception:
+            pass
+    text = (text or "").strip()
+    if len(text) < 30:
+        return await _say(
+            message,
+            "В файле не нашлось текста (возможно, это скан-картинки). "
+            "Пришлите текстовый файл или напишите тему вручную.",
+        )
+    await state.update_data(topic=_short_title(name.rsplit(".", 1)[0]), material=text, strict=True)
+    await state.set_state(MakeTest.lang)
+    await _say(
+        message,
+        f"📄 Принял материал ({len(text)} символов) — составлю тест строго по нему. "
+        "На каком <b>языке</b>?",
+        reply_markup=lang_kb("tlang"),
+    )
 
 
 @router.callback_query(MakeTest.lang, F.data.regexp(r"^tlang:(ru|uz|en)$"))
@@ -384,6 +453,8 @@ async def make_test_count(message: Message, state: FSMContext):
     n = max(1, min(int(digits), 40))
     data = await state.get_data()
     topic, lang = data.get("topic", ""), data.get("lang", "ru")
+    material = data.get("material", "")
+    strict = bool(data.get("strict"))
     # Списываем стоимость заранее (для студентов). Преподаватели — бесплатно (charged=0).
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
@@ -394,13 +465,23 @@ async def make_test_count(message: Message, state: FSMContext):
             await state.clear()
             return await message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb())
     qn = " Много запросов — вы в очереди, подождите." if limits.queued() else ""
-    wait = await _say(message, f"⏳ Генерирую тест «{escape(topic)}» на {n} вопросов…" + qn)
+    src_note = " по вашему материалу" if material else ""
+    label = f"«{escape(topic)}»" if topic else ""
+    wait = await _say(message, f"⏳ Генерирую тест {label} на {n} вопросов{src_note}…" + qn)
+    ctx = None
     try:
         async with limits.gen_slot():
-            async with dbmod.SessionLocal() as db, limits.timing("rag"):
-                ctx = await svc.library_context(db, topic)
-            async with limits.timing("text"):
-                questions = await generate_test_questions(topic, n, lang=lang, context=ctx["context"])
+            if material:
+                # Материал прислал пользователь — RAG по библиотеке не нужен, берём строго его.
+                async with limits.timing("text"):
+                    questions = await generate_test_questions(
+                        topic, n, lang=lang, context=material, strict=True
+                    )
+            else:
+                async with dbmod.SessionLocal() as db, limits.timing("rag"):
+                    ctx = await svc.library_context(db, topic)
+                async with limits.timing("text"):
+                    questions = await generate_test_questions(topic, n, lang=lang, context=ctx["context"])
     except svc.ServiceError as e:
         await _refund(message.from_user, charged)
         await state.clear()
@@ -419,9 +500,10 @@ async def make_test_count(message: Message, state: FSMContext):
     name, blob = build_test_docx(title, qs)
     note = "" if len(qs) >= n else f" (запрашивали {n}, собрано {len(qs)})"
     paid = f" Списано {_money(charged)}." if charged else ""
+    src = ("\n📄 Строго по вашему материалу" if material else _rag_note(ctx, lang))
     await message.answer_document(
         BufferedInputFile(blob, name),
-        caption=f"📄 Готово — {len(qs)} вопросов{note}.{paid} Проверьте файл.{_rag_note(ctx, lang)}",
+        caption=f"📄 Готово — {len(qs)} вопросов{note}.{paid} Проверьте файл.{src}",
     )
     if not is_teacher:
         # Студенту отдаём ТОЛЬКО файл — в приложении тест не сохраняется (запуск для группы — у преподавателей).
