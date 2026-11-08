@@ -543,6 +543,10 @@ def create_app() -> FastAPI:
         import mimetypes
 
         path, name = await svc.library_doc_path(db, doc_id)
+        # КРИТИЧНО: отпускаем единственное соединение SQLite ДО отдачи файла. Иначе медленная
+        # загрузка книги (особенно с телефона) держит соединение весь download и подвешивает
+        # и бота, и приложение для всех остальных.
+        await db.close()
         media = mimetypes.guess_type(name)[0] or "application/octet-stream"
         # FileResponse сам поддерживает HTTP Range → PDF.js тянет только нужные страницы.
         return FileResponse(path, media_type=media, headers={"Cache-Control": "private, max-age=600"})

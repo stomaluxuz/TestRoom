@@ -1738,6 +1738,10 @@ async def add_library_doc_from_path(
         except OSError:
             pass
         raise
+    # КРИТИЧНО: отпускаем единственное соединение SQLite на время тяжёлого извлечения текста.
+    # Иначе загрузка большой книги держит соединение и подвешивает бота/приложение для всех.
+    uploader_id = teacher.id  # фиксируем до rollback (он «протухает» ORM-объекты)
+    await db.rollback()
     text = ""
     if 0 < size <= LIBRARY_TEXT_EXTRACT_MAX:  # для поиска/ИИ; у огромных сканов текста нет
         try:
@@ -1750,7 +1754,7 @@ async def add_library_doc_from_path(
     doc = LibraryDoc(
         subject_id=subject_id, title=title[:300], filename=(filename or "file")[:300],
         content_type=content_type, size=size, path="", text=text,
-        uploaded_by=teacher.id, status="pending",
+        uploaded_by=uploader_id, status="pending",
     )
     db.add(doc)
     await db.flush()  # получить id для имени файла
@@ -1911,10 +1915,14 @@ async def library_doc_search(db: AsyncSession, doc_id: int, q: str, allow_pendin
                 break
         return pages, total
 
+    # Отпускаем единственное соединение SQLite на время постраничного сканирования PDF,
+    # иначе поиск по большой книге держит БД и подвешивает бота/приложение.
+    doc_path = d.path  # фиксируем до rollback (он «протухает» ORM-объекты)
+    await db.rollback()
     try:
         # постраничное чтение PDF — блокирующее; уводим в поток, чтобы поиск по большой
         # книге не подвешивал бот/приложение
-        pages, total = await asyncio.to_thread(_scan, d.path, q)
+        pages, total = await asyncio.to_thread(_scan, doc_path, q)
     except Exception:
         return {"pages": [], "total": 0}
     return {"pages": pages, "total": total}
