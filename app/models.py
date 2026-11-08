@@ -232,6 +232,8 @@ class LibraryDoc(Base):
     size: Mapped[int] = mapped_column(Integer, default=0)
     path: Mapped[str] = mapped_column(String(500))  # путь к файлу на диске
     text: Mapped[str | None] = mapped_column(Text)  # извлечённый текст
+    book_title: Mapped[str | None] = mapped_column(Text)  # настоящее название книги (с обложки/титула, ИИ)
+    has_cover: Mapped[bool] = mapped_column(Boolean, default=False)  # есть обложка-картинка (1-я страница)
     uploaded_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)  # pending/approved/rejected
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

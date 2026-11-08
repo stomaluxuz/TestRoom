@@ -576,6 +576,13 @@ def create_app() -> FastAPI:
 
         return await svc.ai_chat(db, user, body.messages or [], body.lang or "ru", send_file=send_file)
 
+    @app.get("/api/library/docs/{doc_id}/cover")
+    async def library_cover(doc_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Обложка книги (1-я страница PDF)."""
+        path = await svc.library_cover_path(db, doc_id)
+        await db.close()  # отпускаем соединение до отдачи файла
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
     @app.get("/api/library/docs/{doc_id}/progress")
     async def library_progress_get(
         doc_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)

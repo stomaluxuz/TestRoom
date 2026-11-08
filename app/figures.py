@@ -16,6 +16,28 @@ _MAX_PER_DOC = 400       # предохранитель на огромные а
 _FULLPAGE_RATIO = 0.92   # картинка почти во всю страницу → вероятно скан-страница, пропускаем
 
 
+def render_pdf_cover(pdf_path: str, px: int = 700) -> bytes | None:
+    """Рендерит ПЕРВУЮ страницу PDF в JPEG (обложка книги). None — если не PDF/ошибка.
+    Тяжёлое (рендер) — вызывать в отдельном потоке."""
+    try:
+        import pymupdf
+
+        doc = pymupdf.open(pdf_path)
+        try:
+            if doc.page_count == 0:
+                return None
+            page = doc.load_page(0)
+            rect = page.rect
+            scale = px / max(float(rect.width), float(rect.height), 1.0)
+            scale = min(scale, 3.0)  # не раздуваем мелкие страницы
+            pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+            return pix.tobytes("jpeg", jpg_quality=82)
+        finally:
+            doc.close()
+    except Exception:
+        return None
+
+
 def extract_pdf_figures(pdf_path: str) -> list[dict]:
     """Возвращает [{page, data(bytes jpeg), w, h}] — иллюстрации из PDF. Тяжёлое: вызывать в потоке."""
     try:

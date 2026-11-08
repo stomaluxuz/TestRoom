@@ -75,6 +75,11 @@ h1.ell, h2.ell { display: block; }
   background: var(--bg2); padding-top: 6px; }
 .chatinput textarea { flex: 1; resize: none; }
 .chatinput .btn { width: 52px; margin-top: 0; padding: 10px; flex-shrink: 0; }
+.bookcover { width: 40px; height: 54px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
+  background: var(--bg2); border: 1px solid var(--bg2); }
+.bookcover.big { width: 96px; height: 130px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.dochead { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 6px; }
+.dochead > div { min-width: 0; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--bg2);
   border-top-color: var(--link); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }

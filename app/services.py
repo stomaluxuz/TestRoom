@@ -1865,7 +1865,49 @@ async def add_library_doc_from_path(
     os.replace(src_path, final)  # перемещаем temp → финал
     doc.path = final
     await db.commit()
+    # Обложка (1-я страница) и настоящее название книги — лучший труд, не роняем загрузку.
+    await _enrich_library_doc(db, doc, final, text)
     return doc
+
+
+def _cover_path(doc_id: int) -> str:
+    import os
+
+    return os.path.join(settings.library_dir, "covers", f"{doc_id}.jpg")
+
+
+async def _enrich_library_doc(db: AsyncSession, doc: LibraryDoc, path: str, text: str) -> None:
+    """Делает обложку из первой страницы PDF и определяет настоящее название книги (ИИ).
+    Выполняется после коммита — соединение БД свободно во время тяжёлой работы."""
+    import os
+
+    from . import ai
+    from . import figures as figmod
+
+    changed = False
+    try:
+        if (doc.filename or "").lower().endswith(".pdf"):
+            cover = await asyncio.to_thread(figmod.render_pdf_cover, path)
+            if cover:
+                os.makedirs(os.path.join(settings.library_dir, "covers"), exist_ok=True)
+                with open(_cover_path(doc.id), "wb") as f:
+                    f.write(cover)
+                doc.has_cover = True
+                changed = True
+    except Exception:
+        pass
+    try:
+        bt = await ai.detect_book_meta(text)
+        if bt:
+            doc.book_title = bt[:300]
+            changed = True
+    except Exception:
+        pass
+    if changed:
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
 
 async def add_library_doc(
@@ -1903,7 +1945,10 @@ async def list_library_docs(
     return [
         {
             "id": d.id,
-            "title": d.title,
+            "title": d.book_title or d.title,  # показываем настоящее название книги, если распознано
+            "label": d.title,  # как назвал преподаватель
+            "book_title": d.book_title,
+            "has_cover": bool(d.has_cover),
             "subject_id": d.subject_id,
             "subject": subj.get(d.subject_id, ""),
             "filename": d.filename,
@@ -1924,7 +1969,10 @@ async def get_library_doc(db: AsyncSession, doc_id: int, allow_pending: bool = F
     is_pdf = (d.filename or "").lower().endswith(".pdf")
     return {
         "id": d.id,
-        "title": d.title,
+        "title": d.book_title or d.title,
+        "label": d.title,
+        "book_title": d.book_title,
+        "has_cover": bool(d.has_cover),
         "subject": subj.name if subj else "",
         "subject_id": d.subject_id,
         "filename": d.filename,
@@ -1986,6 +2034,68 @@ async def library_doc_path(db: AsyncSession, doc_id: int, allow_pending: bool = 
     if not d.path or not os.path.exists(d.path):
         raise ServiceError("Файл не найден на сервере.", 404)
     return d.path, d.filename
+
+
+async def library_cover_path(db: AsyncSession, doc_id: int, allow_pending: bool = False) -> str:
+    """Путь к файлу обложки книги (1-я страница). 404, если обложки нет."""
+    import os
+
+    d = await db.get(LibraryDoc, doc_id)
+    if d is None or (d.status != "approved" and not allow_pending):
+        raise ServiceError("Материал не найден.", 404)
+    p = _cover_path(doc_id)
+    if not d.has_cover or not os.path.exists(p):
+        raise ServiceError("Обложки нет.", 404)
+    return p
+
+
+async def backfill_covers(db: AsyncSession, limit: int = 500) -> int:
+    """Доделать обложки и названия для УЖЕ загруженных книг (admin). Возвращает число обработанных."""
+    import os
+
+    from . import ai
+    from . import figures as figmod
+
+    ids = list((await db.scalars(select(LibraryDoc.id).where(LibraryDoc.status == "approved"))).all())
+    await db.rollback()
+    done = 0
+    for did in ids:
+        if done >= limit:
+            break
+        d = await db.get(LibraryDoc, did)
+        if d is None:
+            continue
+        is_pdf = (d.filename or "").lower().endswith(".pdf")
+        need_cover = is_pdf and not d.has_cover
+        need_title = not d.book_title
+        path, text = d.path, (d.text or "")
+        await db.rollback()  # освобождаем соединение на время рендера/ИИ
+        if not (need_cover or need_title):
+            continue
+        cover = None
+        if need_cover and path and os.path.exists(path):
+            cover = await asyncio.to_thread(figmod.render_pdf_cover, path)
+        bt = ""
+        if need_title and text:
+            try:
+                bt = await ai.detect_book_meta(text)
+            except Exception:
+                bt = ""
+        if not (cover or bt):
+            continue
+        d2 = await db.get(LibraryDoc, did)
+        if d2 is None:
+            continue
+        if cover:
+            os.makedirs(os.path.join(settings.library_dir, "covers"), exist_ok=True)
+            with open(_cover_path(did), "wb") as f:
+                f.write(cover)
+            d2.has_cover = True
+        if bt:
+            d2.book_title = bt[:300]
+        await db.commit()
+        done += 1
+    return done
 
 
 async def library_doc_search(db: AsyncSession, doc_id: int, q: str, allow_pending: bool = False) -> dict:
@@ -2355,8 +2465,10 @@ async def library_context(
     doc_ids = {t[2] for t in top}
     texts = dict((await db.execute(
         select(LibraryChunk.id, LibraryChunk.text).where(LibraryChunk.id.in_(chunk_ids)))).all())
-    titles = dict((await db.execute(
-        select(LibraryDoc.id, LibraryDoc.title).where(LibraryDoc.id.in_(doc_ids)))).all())
+    titles = {}
+    for did, title, book_title in (await db.execute(
+        select(LibraryDoc.id, LibraryDoc.title, LibraryDoc.book_title).where(LibraryDoc.id.in_(doc_ids)))).all():
+        titles[did] = book_title or title  # для ссылок используем настоящее название книги
     parts, sources = [], []
     for score, cid, did in top:
         title = titles.get(did, "")

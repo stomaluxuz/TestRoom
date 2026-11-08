@@ -1551,6 +1551,19 @@ async def unproplus_cmd(message: Message, command: CommandObject, bot: Bot):
         pass
 
 
+@router.message(Command("covers"))
+async def covers_cmd(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer("⏳ Делаю обложки и определяю названия для уже загруженных книг…")
+    async with dbmod.SessionLocal() as db:
+        try:
+            n = await svc.backfill_covers(db)
+        except Exception as e:
+            return await message.answer(f"Ошибка: {escape(str(e))}")
+    await message.answer(f"✅ Обработано книг: {n}. Откройте библиотеку — обложки на месте.")
+
+
 @router.message(Command("block", "unblock"))
 async def block(message: Message, command: CommandObject):
     if not is_admin(message.from_user.id):

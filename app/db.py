@@ -86,6 +86,10 @@ def _migrate(conn):
         dcols = {c["name"] for c in insp.get_columns("library_docs")}
         if "figures_status" not in dcols:
             conn.execute(text("ALTER TABLE library_docs ADD COLUMN figures_status VARCHAR(16)"))
+        if "book_title" not in dcols:
+            conn.execute(text("ALTER TABLE library_docs ADD COLUMN book_title TEXT"))
+        if "has_cover" not in dcols:
+            conn.execute(text("ALTER TABLE library_docs ADD COLUMN has_cover BOOLEAN NOT NULL DEFAULT 0"))
     scols = {c["name"] for c in insp.get_columns("sessions")}
     if "solo" not in scols:
         conn.execute(text("ALTER TABLE sessions ADD COLUMN solo BOOLEAN NOT NULL DEFAULT 0"))

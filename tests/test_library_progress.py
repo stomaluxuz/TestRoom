@@ -11,6 +11,30 @@ async def _make_doc(db, filename="book.pdf", text="полный текст кн�
     return d
 
 
+async def test_upload_makes_cover_and_detects_title(db, monkeypatch):
+    import os
+    from app import ai as ai_mod
+    from app import figures as fig_mod
+
+    async def fake_meta(text):
+        return "Терапевтическая стоматология (с обложки)"
+
+    monkeypatch.setattr(ai_mod, "detect_book_meta", fake_meta)
+    monkeypatch.setattr(fig_mod, "render_pdf_cover", lambda path, px=700: b"\xff\xd8\xff cover")
+
+    t = await svc.get_or_create_user(db, 820, "prepod")
+    t.role = "teacher"
+    await db.commit()
+    sid = (await svc.list_library_subjects(db))[0]["id"]
+    doc = await svc.add_library_doc(db, t, sid, "Лекция", "book.pdf", "application/pdf", b"%PDF-1.4 test")
+    assert doc.has_cover is True
+    assert doc.book_title and "обложки" in doc.book_title
+    assert os.path.exists(svc._cover_path(doc.id))
+    # в карточке показывается настоящее название книги
+    info = await svc.get_library_doc(db, doc.id, allow_pending=True)
+    assert info["title"] == doc.book_title and info["has_cover"] is True
+
+
 async def test_pdf_doc_omits_heavy_text(db):
     # Для PDF текст не отдаём (он на мегабайты и не нужен — книга рисуется из файла).
     d = await _make_doc(db, filename="book.pdf", text="x" * 10000)

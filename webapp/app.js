@@ -611,10 +611,15 @@ async function libraryScreen(params = {}) {
     el.className = "";
     el.innerHTML = docs.length ? docs.map(d => `
       <div class="item" data-id="${d.id}">
-        <span class="ico">📄</span>
+        ${d.has_cover ? `<img class="bookcover" data-cid="${d.id}" alt="">` : `<span class="ico">📄</span>`}
         <div class="grow"><div class="ell">${esc(d.title)}</div><div class="muted small">${esc(d.subject)}${d.by ? " · " + esc(d.by) : ""}</div></div>
         <button class="mini ok openbtn">${L.open}</button>
       </div>`).join("") : `<p class="muted small">${L.none}</p>`;
+    // обложки требуют авторизации — грузим через fetch и подставляем blob
+    document.querySelectorAll("#list .bookcover").forEach(async img => {
+      try { const buf = await fetchFile(`/api/library/docs/${img.dataset.cid}/cover`); img.src = URL.createObjectURL(new Blob([buf], { type: "image/jpeg" })); }
+      catch (e) {}
+    });
     onAll("#list .item", "click", el2 => {
       try { tg && tg.HapticFeedback.impactOccurred("light"); } catch (e) {}
       go(libraryDocScreen, { id: +el2.dataset.id });
@@ -772,8 +777,9 @@ async function libraryDocScreen({ id }) {
   const isPdf = d.is_pdf != null ? d.is_pdf : (d.filename || "").toLowerCase().endsWith(".pdf");
   const canSend = (d.size || 0) <= 50 * 1024 * 1024; // Telegram не отдаёт файлы больше 50 МБ
   render(`
-    <h1 class="ell">${esc(d.title)}</h1>
-    <p class="muted small">${esc(d.subject)} · ${esc(d.filename)}</p>
+    <div class="dochead">${d.has_cover ? `<img class="bookcover big" id="dcover" alt="">` : ""}
+      <div><h1 class="ell">${esc(d.title)}</h1>
+      <p class="muted small">${esc(d.subject)} · ${esc(d.filename)}</p></div></div>
     ${canSend
       ? `<button class="btn secondary" id="dl">${L.download}</button>`
       : `<p class="muted small">Большой файл — читайте прямо в приложении (скачивание через бота доступно только до 50 МБ).</p>`}
@@ -782,6 +788,9 @@ async function libraryDocScreen({ id }) {
             : (d.text ? esc(d.text).replace(/\n/g, "<br>") : '<span class="muted">—</span>')
     }</div>
   `);
+  if (d.has_cover) {
+    (async () => { try { const buf = await fetchFile(`/api/library/docs/${id}/cover`); const im = document.getElementById("dcover"); if (im) im.src = URL.createObjectURL(new Blob([buf], { type: "image/jpeg" })); } catch (e) {} })();
+  }
   on("#dl", "click", async () => {
     try { await api(`/api/library/docs/${id}/download`, { method: "POST" }); toast(L.file_sent); haptic("success"); }
     catch (e) { toast(e.message); }

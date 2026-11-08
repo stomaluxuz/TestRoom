@@ -243,6 +243,27 @@ async def chat_with_tools(messages: list[dict], lang: str, context: str, execute
     return "Готово."
 
 
+async def detect_book_meta(sample_text: str) -> str:
+    """По началу документа определяет НАСТОЯЩЕЕ название книги (как на обложке/титуле).
+    Возвращает название или '' если определить нельзя / ИИ недоступен."""
+    sample = " ".join((sample_text or "").split())[:2500]
+    if not sample or not settings.anthropic_api_key:
+        return ""
+    prompt = (
+        "Ниже — начало учебного документа (титул/первые страницы). Определи НАСТОЯЩЕЕ название "
+        "книги или материала так, как оно указано на обложке/титуле. Верни ТОЛЬКО название одной "
+        "строкой — без кавычек, без слова «Название», без автора и пояснений. Если определить "
+        "нельзя — верни пустую строку.\n\n"
+        f"{sample}"
+    )
+    try:
+        title = await _ask("Ты точно извлекаешь название книги. Отвечай только названием.", prompt, max_tokens=60)
+    except Exception:
+        return ""
+    title = " ".join((title or "").split()).strip('"«»')
+    return title[:200] if 2 < len(title) < 200 else ""
+
+
 async def chat_answer(messages: list[dict], lang: str = "ru", context: str = "") -> str:
     """Многоходовый ответ ИИ-ассистента (чат). messages — [{role: user/assistant, content}].
     context — выдержки из библиотеки (RAG), если нашлись."""
