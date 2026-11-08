@@ -38,6 +38,8 @@ class User(Base):
     teacher_kafedra: Mapped[str | None] = mapped_column(Text)  # кафедра
     plan: Mapped[str] = mapped_column(String(16), default="free")
     pro_until: Mapped[datetime | None] = mapped_column(DateTime)
+    # Pro+ — высший платный уровень (отдельный срок). Открывает эксклюзивные функции.
+    proplus_until: Mapped[datetime | None] = mapped_column(DateTime)
     blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     # Дневной лимит создания презентаций (по местному дню).
     pres_date: Mapped[date | None] = mapped_column(Date)
@@ -54,6 +56,11 @@ class User(Base):
     @property
     def is_pro(self) -> bool:
         return self.plan == "pro" and self.pro_until is not None and self.pro_until > utcnow()
+
+    @property
+    def is_pro_plus(self) -> bool:
+        """Pro+ активен. Высший уровень — открывает эксклюзивные функции и даёт безлимит."""
+        return self.proplus_until is not None and self.proplus_until > utcnow()
 
 
 class Subject(Base):

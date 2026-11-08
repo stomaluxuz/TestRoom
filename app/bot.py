@@ -1405,7 +1405,12 @@ def _teachers_text(users: list[User]) -> str:
         return "Преподавателей пока нет."
     lines = []
     for u in users[:100]:
-        plan = f"Pro до {u.pro_until:%d.%m.%Y}" if u.is_pro else "free"
+        if u.is_pro_plus:
+            plan = f"Pro+ до {u.proplus_until:%d.%m.%Y}"
+        elif u.is_pro:
+            plan = f"Pro до {u.pro_until:%d.%m.%Y}"
+        else:
+            plan = "free"
         kaf = f" · {escape(u.teacher_kafedra)}" if u.teacher_kafedra else ""
         lines.append(f"<code>{u.id}</code> {escape(u.full_name or '?')} — {escape(u.teacher_info or '')}{kaf} [{plan}]")
     return "\n".join(lines)
@@ -1502,6 +1507,46 @@ async def unpro(message: Message, command: CommandObject, bot: Bot):
     await message.answer(f"✅ Pro снят у {escape(user.full_name or str(uid))}")
     try:
         await bot.send_message(uid, "Подписка Pro снята. Вы на бесплатном тарифе.")
+    except Exception:
+        pass
+
+
+@router.message(Command("give_proplus"))
+async def give_proplus_cmd(message: Message, command: CommandObject, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+    try:
+        uid, days = (int(x) for x in (command.args or "").split())
+    except ValueError:
+        return await message.answer("Формат: /give_proplus <ID> <дней>\nНапример: /give_proplus 123456789 30")
+    async with dbmod.SessionLocal() as db:
+        try:
+            user = await svc.give_pro_plus(db, uid, days)
+        except svc.ServiceError as e:
+            return await message.answer(e.message)
+    await message.answer(f"💎 Pro+ до {user.proplus_until:%d.%m.%Y} для {escape(user.full_name or str(uid))}")
+    try:
+        await bot.send_message(uid, f"💎 Pro+ активен до {user.proplus_until:%d.%m.%Y}. Открыты все возможности!")
+    except Exception:
+        pass
+
+
+@router.message(Command("unproplus"))
+async def unproplus_cmd(message: Message, command: CommandObject, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+    try:
+        uid = int((command.args or "").strip())
+    except ValueError:
+        return await message.answer("Формат: /unproplus <ID>\nНапример: /unproplus 123456789")
+    async with dbmod.SessionLocal() as db:
+        try:
+            user = await svc.remove_pro_plus(db, uid)
+        except svc.ServiceError as e:
+            return await message.answer(e.message)
+    await message.answer(f"✅ Pro+ снят у {escape(user.full_name or str(uid))}")
+    try:
+        await bot.send_message(uid, "Подписка Pro+ снята.")
     except Exception:
         pass
 

@@ -156,6 +156,35 @@ async def give_pro(db: AsyncSession, user_id: int, days: int) -> User:
     return user
 
 
+async def give_pro_plus(db: AsyncSession, user_id: int, days: int) -> User:
+    """Включить/продлить Pro+ (высший уровень). Выдаёт админ; позже — самопокупка с баланса."""
+    days = max(1, int(days or 0))
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ServiceError("Пользователь не найден.", 404)
+    base = user.proplus_until if user.is_pro_plus else utcnow()
+    user.proplus_until = base + timedelta(days=days)
+    await db.commit()
+    return user
+
+
+async def remove_pro_plus(db: AsyncSession, user_id: int) -> User:
+    """Снять Pro+."""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ServiceError("Пользователь не найден.", 404)
+    user.proplus_until = None
+    await db.commit()
+    return user
+
+
+def require_pro_plus(user: User):
+    """Гейт для эксклюзивных функций Pro+. Админ проходит всегда."""
+    if user.id in settings.admin_ids or user.is_pro_plus:
+        return
+    raise ServiceError("Эта функция доступна только с подпиской Pro+.", 402)
+
+
 def require_teacher(user: User):
     if not user.is_teacher:
         raise ServiceError("Создавать комнаты для группы могут только преподаватели.", 403)
@@ -262,8 +291,8 @@ async def get_price(db: AsyncSession, kind: str) -> int:
 
 
 def is_free_user(user: User) -> bool:
-    """Кто пользуется бесплатно: преподаватели, админы и Pro. Платят только студенты."""
-    return user.is_teacher or user.id in settings.admin_ids or user.is_pro
+    """Кто пользуется бесплатно: преподаватели, админы, Pro и Pro+. Платят только студенты."""
+    return user.is_teacher or user.id in settings.admin_ids or user.is_pro or user.is_pro_plus
 
 
 async def charge_feature(db: AsyncSession, user: User, kind: str) -> int:
@@ -1340,6 +1369,9 @@ async def admin_stats(db: AsyncSession) -> dict:
         "pro": await db.scalar(
             select(func.count()).select_from(User).where(User.plan == "pro", User.pro_until > utcnow())
         ),
+        "proplus": await db.scalar(
+            select(func.count()).select_from(User).where(User.proplus_until > utcnow())
+        ),
         "tests": await db.scalar(select(func.count()).select_from(Test)),
         "presentations": await db.scalar(select(func.coalesce(func.sum(User.pres_total), 0))),
         # Деньги: всего зачислено (подтверждённые пополнения) и сколько заявок ждёт подтверждения.
@@ -1573,6 +1605,8 @@ async def admin_teachers(db: AsyncSession, query: str = "", status: str = "all")
             "status": "pending" if (u.teacher_pending and u.role != "teacher") else "teacher",
             "plan": "pro" if u.is_pro else "free",
             "pro_until": u.pro_until.isoformat() if u.is_pro else None,
+            "is_pro_plus": u.is_pro_plus,
+            "proplus_until": u.proplus_until.isoformat() if u.is_pro_plus else None,
             "blocked": u.blocked,
             "is_admin": u.id in settings.admin_ids,
             "tests": tests.get(u.id, 0),

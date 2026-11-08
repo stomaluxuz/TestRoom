@@ -1093,7 +1093,7 @@ async function teacherHome() {
     ${langBar()}
     <h1>${esc(ME.full_name)}</h1>
     <div class="row" style="margin:-6px 0 12px"><span class="muted small">${t("teacher")}</span>
-      <span class="badge ${ME.plan === "pro" ? "pro" : ""}">${ME.plan === "pro" ? t("plan_pro") + " " + new Date(ME.pro_until).toLocaleDateString("ru-RU") : t("plan_free")}</span></div>
+      <span class="badge ${ME.is_pro_plus || ME.plan === "pro" ? "pro" : ""}">${ME.is_pro_plus ? "💎 Pro+ " + new Date(ME.proplus_until).toLocaleDateString("ru-RU") : (ME.plan === "pro" ? t("plan_pro") + " " + new Date(ME.pro_until).toLocaleDateString("ru-RU") : t("plan_free"))}</span></div>
     ${a ? `<div class="banner" id="active"><b>${t("test_running")} · ${esc(a.group)}</b><br>
       <span class="small">${esc(a.test_title)} · ${t("code")} <b>${a.code}</b> · ${t("time_left")} <span id="aleft">${fmtTime(a.seconds_left)}</span></span></div>` : ""}
     <div class="item" id="tests"><span class="ico">📚</span><div class="grow">${t("my_tests")}</div></div>
@@ -1532,6 +1532,7 @@ async function adminScreen(params = {}) {
       <div class="stat"><span class="muted small">Преподавателей</span><b>${st.teachers}</b></div>
       <div class="stat"><span class="muted small">Заявок</span><b>${st.pending}</b></div>
       <div class="stat"><span class="muted small">Pro-подписок</span><b>${st.pro}</b></div>
+      <div class="stat"><span class="muted small">💎 Pro+ подписок</span><b>${st.proplus ?? 0}</b></div>
       <div class="stat tap" id="m-users"><span class="muted small">👥 Пользователей сегодня ›</span><b>${st.users_today ?? 0}</b></div>
       <div class="stat tap" id="m-tests"><span class="muted small">📝 Тестов сегодня ›</span><b>${st.tests_today ?? 0}</b></div>
       <div class="stat tap" id="m-pres"><span class="muted small">🖥 Презентаций сегодня ›</span><b>${st.presentations_today ?? 0}</b></div>
@@ -1836,7 +1837,7 @@ function adminTeacherScreen({ t }) {
       <div class="kv"><span>Вуз</span><span>${esc(t.info || "—")}</span></div>
       <div class="kv"><span>Кафедра</span><span>${esc(t.kafedra || "—")}</span></div>
       <div class="kv"><span>Статус</span><span>${{ pending: "заявка", teacher: "преподаватель" }[t.status] || t.status}${t.blocked ? ", заблокирован" : ""}</span></div>
-      <div class="kv"><span>Тариф</span><span>${t.plan === "pro" ? "Pro до " + new Date(t.pro_until + "Z").toLocaleDateString("ru-RU") : "бесплатный"}</span></div>
+      <div class="kv"><span>Тариф</span><span>${t.is_pro_plus ? "💎 Pro+ до " + new Date(t.proplus_until + "Z").toLocaleDateString("ru-RU") : (t.plan === "pro" ? "Pro до " + new Date(t.pro_until + "Z").toLocaleDateString("ru-RU") : "бесплатный")}</span></div>
       <div class="kv"><span>Тестов / запусков</span><span>${t.tests} / ${t.sessions}</span></div>
       <div class="kv"><span>Прохождений студентами</span><span>${t.attempts}</span></div>
       <div class="kv"><span>Последний запуск</span><span>${t.last_session ? fmtDate(t.last_session) : "—"}</span></div>
@@ -1846,6 +1847,8 @@ function adminTeacherScreen({ t }) {
     ${t.status === "teacher" ? `<button class="btn" id="enter">🛠 Открыть кабинет преподавателя</button>` : ""}
     ${t.status === "teacher" ? `<label>Выдать Pro (дней)</label><input id="days" type="number" value="30" min="1"><button class="btn secondary" id="pro">⭐ Выдать Pro</button>` : ""}
     ${t.plan === "pro" ? `<button class="btn secondary" id="unpro">✖️ Снять Pro</button>` : ""}
+    <label>💎 Выдать Pro+ (дней)</label><input id="ppdays" type="number" value="30" min="1"><button class="btn secondary" id="proplus">💎 Выдать Pro+</button>
+    ${t.is_pro_plus ? `<button class="btn secondary" id="unproplus">✖️ Снять Pro+</button>` : ""}
     ${t.status === "teacher" && !t.is_admin ? `<button class="btn danger" id="demote">🎓 Снять роль преподавателя</button>` : ""}
     ${t.is_admin ? "" : `<button class="btn ${t.blocked ? "secondary" : "danger"}" id="block">${t.blocked ? "Разблокировать" : "Заблокировать"}</button>`}
     ${t.username ? `<button class="btn secondary" id="chat">✉️ Написать в Telegram</button>` : ""}
@@ -1854,6 +1857,8 @@ function adminTeacherScreen({ t }) {
   on("#no", "click", () => act("decide", { approve: false }, "Заявка отклонена"));
   on("#pro", "click", () => act("pro", { days: +document.getElementById("days").value }, "Pro выдан"));
   on("#unpro", "click", () => { if (confirm("Снять Pro-подписку? Пользователь перейдёт на бесплатный тариф.")) act("unpro", {}, "Pro снят"); });
+  on("#proplus", "click", () => act("proplus", { days: +document.getElementById("ppdays").value }, "Pro+ выдан"));
+  on("#unproplus", "click", () => { if (confirm("Снять Pro+?")) act("unproplus", {}, "Pro+ снят"); });
   on("#demote", "click", () => {
     if (confirm(`Снять роль преподавателя у «${t.name || t.id}»? Он станет обычным пользователем (Pro тоже снимется). Тесты и история сохранятся, роль можно вернуть при новой заявке.`))
       act("remove", {}, "Роль преподавателя снята");

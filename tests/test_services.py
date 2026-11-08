@@ -650,6 +650,25 @@ async def test_remove_teacher(db):
         await svc.remove_teacher(db, ADMIN_ID)
 
 
+async def test_pro_plus_grant_and_gate(db):
+    u = await make_student(db, 900)
+    # по умолчанию не Pro+ и платит за генерацию
+    assert u.is_pro_plus is False
+    assert svc.is_free_user(u) is False
+    with pytest.raises(svc.ServiceError):
+        svc.require_pro_plus(u)
+    # выдаём Pro+ → активен, безлимит, гейт проходит
+    u = await svc.give_pro_plus(db, u.id, 30)
+    assert u.is_pro_plus is True
+    assert svc.is_free_user(u) is True
+    svc.require_pro_plus(u)  # не бросает
+    # снятие
+    u = await svc.remove_pro_plus(db, u.id)
+    assert u.is_pro_plus is False
+    with pytest.raises(svc.ServiceError):
+        svc.require_pro_plus(u)
+
+
 async def test_admin_stats(db):
     t = await make_teacher(db)
     await make_test(db, t, 2)

@@ -282,8 +282,10 @@ def create_app() -> FastAPI:
             "is_teacher": user.is_teacher or (acting and user.role == "teacher"),
             "is_admin": request.state.real_user_id in settings.admin_ids,
             "acting_as": {"id": user.id, "name": user.full_name, "blocked": user.blocked} if acting else None,
-            "plan": "pro" if user.is_pro else "free",
+            "plan": "proplus" if user.is_pro_plus else ("pro" if user.is_pro else "free"),
             "pro_until": user.pro_until.isoformat() if user.is_pro else None,
+            "is_pro_plus": user.is_pro_plus,
+            "proplus_until": user.proplus_until.isoformat() if user.is_pro_plus else None,
         }
         cfg = await svc.get_settings(db)
         data["balance"] = user.balance or 0
@@ -690,6 +692,22 @@ def create_app() -> FastAPI:
         svc.add_admin_log(db, admin.id, uid, "снял Pro")
         await db.commit()
         await notify(uid, "Подписка Pro снята. Вы на бесплатном тарифе.")
+        return {"ok": True}
+
+    @app.post("/api/admin/teachers/{uid}/proplus")
+    async def a_proplus(uid: int, body: ProIn, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+        u = await svc.give_pro_plus(db, uid, body.days)
+        svc.add_admin_log(db, admin.id, uid, f"выдал Pro+ на {body.days} дн.")
+        await db.commit()
+        await notify(uid, f"💎 Pro+ активен до {u.proplus_until:%d.%m.%Y}. Открыты все возможности!")
+        return {"proplus_until": u.proplus_until.isoformat()}
+
+    @app.post("/api/admin/teachers/{uid}/unproplus")
+    async def a_unproplus(uid: int, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+        await svc.remove_pro_plus(db, uid)
+        svc.add_admin_log(db, admin.id, uid, "снял Pro+")
+        await db.commit()
+        await notify(uid, "Подписка Pro+ снята.")
         return {"ok": True}
 
     @app.post("/api/admin/teachers/{uid}/block")
