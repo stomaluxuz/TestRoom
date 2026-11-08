@@ -85,7 +85,8 @@ class Settings:
     photo_dl_timeout: float = field(default_factory=lambda: float(os.getenv("PHOTO_DL_TIMEOUT", "7")))
     photo_api_timeout: float = field(default_factory=lambda: float(os.getenv("PHOTO_API_TIMEOUT", "8")))
     # Порог косинусной близости: ниже — считаем, что в библиотеке релевантного нет.
-    rag_min_score: float = field(default_factory=lambda: float(os.getenv("RAG_MIN_SCORE", "0.45")))
+    # 0.55 — чтобы по чужой теме (нет подходящих книг) не подсовывались нерелевантные куски.
+    rag_min_score: float = field(default_factory=lambda: float(os.getenv("RAG_MIN_SCORE", "0.55")))
     # Пауза (сек) между запросами при БЭКОФИЛЛЕ. На платном тарифе Voyage лимиты высокие —
     # пейсинг почти не нужен. На бесплатном (3 RPM) поднимите RAG_BACKFILL_PACE=22 в .env.
     rag_backfill_pace: float = field(default_factory=lambda: float(os.getenv("RAG_BACKFILL_PACE", "0.5")))
