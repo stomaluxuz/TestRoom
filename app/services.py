@@ -2066,7 +2066,7 @@ async def backfill_covers(db: AsyncSession, limit: int = 500) -> int:
         if d is None:
             continue
         is_pdf = (d.filename or "").lower().endswith(".pdf")
-        need_cover = is_pdf and not d.has_cover
+        need_cover = is_pdf  # пере-рендерим обложку (чинит пустые/устаревшие)
         need_title = not d.book_title
         path, text = d.path, (d.text or "")
         await db.rollback()  # освобождаем соединение на время рендера/ИИ

@@ -24,9 +24,23 @@ def render_pdf_cover(pdf_path: str, px: int = 700) -> bytes | None:
 
         doc = pymupdf.open(pdf_path)
         try:
-            if doc.page_count == 0:
+            n = doc.page_count
+            if n == 0:
                 return None
-            page = doc.load_page(0)
+            # Ищем первую НЕпустую страницу среди первых четырёх: если 1-я пустая
+            # (или пустая заглушка), берём 2-ю — там обычно титул с названием.
+            idx = 0
+            for i in range(min(4, n)):
+                page = doc.load_page(i)
+                has_text = bool((page.get_text("text") or "").strip())
+                try:
+                    has_img = len(page.get_images()) > 0
+                except Exception:
+                    has_img = False
+                if has_text or has_img:
+                    idx = i
+                    break
+            page = doc.load_page(idx)
             rect = page.rect
             scale = px / max(float(rect.width), float(rect.height), 1.0)
             scale = min(scale, 3.0)  # не раздуваем мелкие страницы
