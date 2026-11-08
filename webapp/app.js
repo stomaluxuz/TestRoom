@@ -780,9 +780,7 @@ async function libraryDocScreen({ id }) {
     <div class="dochead">${d.has_cover ? `<img class="bookcover big" id="dcover" alt="">` : ""}
       <div><h1 class="ell">${esc(d.title)}</h1>
       <p class="muted small">${esc(d.subject)} · ${esc(d.filename)}</p></div></div>
-    ${canSend
-      ? `<button class="btn secondary" id="dl">${L.download}</button>`
-      : `<p class="muted small">Большой файл — читайте прямо в приложении (скачивание через бота доступно только до 50 МБ).</p>`}
+    ${""/* кнопка «Скачать» временно скрыта */}
     <div id="viewer" class="${isPdf ? "pdfwrap" : "card doc"}">${
       isPdf ? `<div class="muted small" id="pdfstatus">${t("loading")} <span class="spin"></span></div>`
             : (d.text ? esc(d.text).replace(/\n/g, "<br>") : '<span class="muted">—</span>')
