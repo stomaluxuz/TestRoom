@@ -689,6 +689,29 @@ async def test_ai_chat_pro_plus_flow(db, monkeypatch):
     assert "sources" in r and "found" in r
 
 
+async def test_ai_chat_tools_path(db, monkeypatch):
+    from app import ai as ai_mod
+    u = await make_student(db, 912)
+    await svc.give_pro_plus(db, u.id, 30)
+    captured = {}
+
+    async def fake_tools(messages, lang, context, execute):
+        captured["execute"] = execute
+        return "сделал и отправил в бот"
+
+    monkeypatch.setattr(ai_mod, "chat_with_tools", fake_tools)
+    sent = []
+
+    async def send_file(fn, data, cap):
+        sent.append(fn)
+
+    r = await svc.ai_chat(db, u, [{"role": "user", "content": "сделай презентацию"}], "ru", send_file=send_file)
+    assert r["answer"] == "сделал и отправил в бот"
+    # документ-инструмент работает и зовёт send_file
+    out = await captured["execute"]("create_document", {"title": "Тест", "content": "Привет мир"})
+    assert "отправлен" in out and sent
+
+
 async def test_admin_stats(db):
     t = await make_teacher(db)
     await make_test(db, t, 2)

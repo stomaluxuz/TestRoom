@@ -185,10 +185,14 @@ def require_pro_plus(user: User):
     raise ServiceError("Эта функция доступна только с подпиской Pro+.", 402)
 
 
-async def ai_chat(db: AsyncSession, user: User, messages: list[dict], lang: str = "ru") -> dict:
-    """ИИ-чат «спроси базу» (только Pro+): отвечает с опорой на библиотеку (RAG) + ссылки на источник."""
+async def ai_chat(db: AsyncSession, user: User, messages: list[dict], lang: str = "ru", send_file=None) -> dict:
+    """ИИ-чат «спроси базу» (только Pro+): отвечает с опорой на библиотеку (RAG) + ссылки на источник.
+
+    send_file(filename, data, caption) — если передан, у ИИ появляются «действия»: он может
+    создать презентацию/тест/Word-документ и отправить файл пользователю в чат с ботом."""
     from . import ai
     from . import limits
+    from . import present
 
     require_pro_plus(user)
     msgs = [
@@ -201,8 +205,50 @@ async def ai_chat(db: AsyncSession, user: User, messages: list[dict], lang: str 
     query = msgs[-1]["content"]
     ctx = await library_context(db, query)
     await db.rollback()  # не держим соединение БД во время обращения к ИИ
-    async with limits.gen_slot():
+
+    if send_file is None:  # простой текстовый режим (без действий)
         answer = await ai.chat_answer(msgs[-10:], lang=lang, context=ctx.get("context", ""))
+        return {"answer": answer, "sources": ctx.get("sources", []), "found": ctx.get("found", False)}
+
+    async def execute(name: str, inp: dict) -> str:
+        if name == "create_presentation":
+            topic = str(inp.get("topic") or "").strip()
+            if not topic:
+                return "Нужна тема презентации."
+            slides = max(3, min(int(inp.get("slides") or 8), 20))
+            c = await library_context(db, topic)
+            await db.rollback()
+            async with limits.gen_slot():
+                body = await ai.generate_slides(topic, slides=slides, lang=lang, context=c.get("context", ""))
+                fname, blob = await present.build_presentation(body, max_per_slide=2, sources=c.get("sources"))
+            await send_file(fname, blob, f"🖥 {topic}")
+            return f"Презентация «{topic}» ({slides} сл.) отправлена в бот."
+        if name == "create_test":
+            topic = str(inp.get("topic") or "").strip()
+            if not topic:
+                return "Нужна тема теста."
+            count = max(1, min(int(inp.get("count") or 10), 40))
+            c = await library_context(db, topic)
+            await db.rollback()
+            async with limits.gen_slot():
+                qs = await ai.generate_test_questions(topic, count, lang=lang, context=c.get("context", ""))
+            if not qs:
+                return "Не удалось собрать тест по этой теме."
+            data = [{"text": q.text, "options": q.options, "correct": q.correct} for q in qs]
+            fname, blob = present.build_test_docx(topic[:60], data)
+            await send_file(fname, blob, f"📝 Тест: {topic}")
+            return f"Тест «{topic}» ({len(qs)} вопр.) отправлен в бот."
+        if name == "create_document":
+            title = str(inp.get("title") or "Документ").strip()
+            content = str(inp.get("content") or "").strip()
+            if not content:
+                return "Нет содержания документа."
+            fname, blob = present.build_doc_docx(title, content)
+            await send_file(fname, blob, f"📄 {title}")
+            return f"Документ «{title}» отправлен в бот."
+        return "Неизвестное действие."
+
+    answer = await ai.chat_with_tools(msgs[-10:], lang, ctx.get("context", ""), execute)
     return {"answer": answer, "sources": ctx.get("sources", []), "found": ctx.get("found", False)}
 
 

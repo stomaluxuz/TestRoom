@@ -559,9 +559,22 @@ def create_app() -> FastAPI:
         return FileResponse(path, media_type=media, headers={"Cache-Control": "private, max-age=600"})
 
     @app.post("/api/ai/chat")
-    async def ai_chat_ep(body: ChatIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
-        """ИИ-чат «спроси базу» — только для Pro+ (проверка внутри svc.ai_chat)."""
-        return await svc.ai_chat(db, user, body.messages or [], body.lang or "ru")
+    async def ai_chat_ep(
+        body: ChatIn, request: Request, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+    ):
+        """ИИ-чат «спроси базу» + действия (презентация/тест/документ в бот). Только Pro+."""
+        target_id = request.state.real_user_id
+
+        async def send_file(filename: str, data: bytes, caption: str):
+            if bot_ref.bot is None:
+                raise svc.ServiceError("Бот не запущен — файл отправить не получилось.", 503)
+            from aiogram.types import BufferedInputFile
+
+            await bot_ref.bot.send_document(
+                target_id, BufferedInputFile(data, filename=filename), caption=caption
+            )
+
+        return await svc.ai_chat(db, user, body.messages or [], body.lang or "ru", send_file=send_file)
 
     @app.get("/api/library/docs/{doc_id}/progress")
     async def library_progress_get(

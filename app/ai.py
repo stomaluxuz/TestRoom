@@ -127,6 +127,98 @@ async def _ask(system: str, prompt: str, max_tokens: int = 4000) -> str:
     return "".join(b.text for b in msg.content if b.type == "text").strip()
 
 
+CHAT_TOOLS = [
+    {
+        "name": "create_presentation",
+        "description": "Создать презентацию (.pptx) по теме и отправить пользователю в чат с ботом. "
+        "Вызывай, когда пользователь просит сделать/создать презентацию.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Тема презентации"},
+                "slides": {"type": "integer", "description": "Сколько слайдов (по умолчанию 8)"},
+            },
+            "required": ["topic"],
+        },
+    },
+    {
+        "name": "create_test",
+        "description": "Создать тест по теме и отправить файл (.docx) пользователю в чат с ботом. "
+        "Вызывай, когда пользователь просит сделать/создать тест.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Тема теста"},
+                "count": {"type": "integer", "description": "Сколько вопросов (по умолчанию 10)"},
+            },
+            "required": ["topic"],
+        },
+    },
+    {
+        "name": "create_document",
+        "description": "Оформить готовый текст (статья, реферат, конспект, план) в Word (.docx) и отправить "
+        "пользователю в чат с ботом. Сам напиши содержание и передай его в поле content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Заголовок документа"},
+                "content": {"type": "string", "description": "Полный текст документа"},
+            },
+            "required": ["title", "content"],
+        },
+    },
+]
+
+SYSTEM_CHAT_TOOLS = (
+    "\n\nУ тебя есть инструменты: создать презентацию, создать тест, оформить текст в Word — и все они "
+    "ОТПРАВЛЯЮТ файл пользователю в чат с Telegram-ботом. Используй их ТОЛЬКО когда пользователь явно "
+    "просит что-то создать/сделать/прислать файлом. Для обычных вопросов просто отвечай текстом, без "
+    "инструментов. Если для создания не хватает данных (нет темы, числа слайдов/вопросов) — сначала "
+    "переспроси, НЕ вызывай инструмент. После успешного вызова коротко подтверди, что файл отправлен в бот."
+)
+
+
+async def chat_with_tools(messages: list[dict], lang: str, context: str, execute) -> str:
+    """Чат с инструментами: ИИ может создавать презентации/тесты/документы и слать их в бот.
+    execute(name, input) -> str — выполняет инструмент (генерация + отправка) и возвращает краткий итог."""
+    if not settings.anthropic_api_key:
+        raise _err("ИИ пока не подключён. Обратитесь к администратору.", 403)
+    system = SYSTEM_CHAT + SYSTEM_CHAT_TOOLS + "\n\n" + _lang_instr(lang)
+    if context:
+        system += "\n\n" + _context_block(context)
+    conv = [
+        {"role": m["role"], "content": str(m["content"])[:4000]}
+        for m in messages
+        if m.get("content") and m.get("role") in ("user", "assistant")
+    ][-10:]
+    if not conv:
+        raise _err("Пустой запрос.")
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    for _ in range(4):  # до 4 раундов инструментов
+        try:
+            resp = await client.messages.create(
+                model=settings.anthropic_model, max_tokens=1500,
+                system=system, messages=conv, tools=CHAT_TOOLS,
+            )
+        except anthropic.APIStatusError as e:
+            raise _err(f"ИИ недоступен ({e.status_code}). Попробуйте позже.", 502)
+        except anthropic.APIConnectionError:
+            raise _err("Нет связи с ИИ. Проверьте интернет и попробуйте ещё раз.", 502)
+        tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+        if not tool_uses:
+            return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+        conv.append({"role": "assistant", "content": resp.content})
+        results = []
+        for b in tool_uses:
+            try:
+                out = await execute(b.name, b.input or {})
+            except Exception as e:  # ошибка инструмента не роняет диалог
+                out = f"Не удалось выполнить: {e}"
+            results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
+        conv.append({"role": "user", "content": results})
+    return "Готово."
+
+
 async def chat_answer(messages: list[dict], lang: str = "ru", context: str = "") -> str:
     """Многоходовый ответ ИИ-ассистента (чат). messages — [{role: user/assistant, content}].
     context — выдержки из библиотеки (RAG), если нашлись."""

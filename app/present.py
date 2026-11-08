@@ -347,6 +347,21 @@ def build_test_docx(title: str, questions: list[dict]) -> tuple[str, bytes]:
     return f"{safe[:50]}.docx", buf.getvalue()
 
 
+def build_doc_docx(title: str, text: str) -> tuple[str, bytes]:
+    """Оформляет произвольный текст (статья/реферат/конспект) в Word (.docx)."""
+    from docx import Document
+
+    doc = Document()
+    if title:
+        doc.add_heading(title, level=1)
+    for para in (text or "").split("\n"):
+        doc.add_paragraph(para)
+    buf = io.BytesIO()
+    doc.save(buf)
+    safe = "".join(ch for ch in (title or "document") if ch.isalnum() or ch in " -_").strip() or "document"
+    return f"{safe[:50]}.docx", buf.getvalue()
+
+
 async def build_presentation(
     text: str, *, domain: str | None = None, max_per_slide: int = 1,
     sources: list[str] | None = None, style: str = "modern"
