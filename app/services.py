@@ -1876,6 +1876,14 @@ def _cover_path(doc_id: int) -> str:
     return os.path.join(settings.library_dir, "covers", f"{doc_id}.jpg")
 
 
+def _display_title(d: LibraryDoc) -> str:
+    """Название для показа: настоящее (если распознано и не мусор), иначе подпись преподавателя."""
+    from .ai import is_no_title
+
+    bt = d.book_title
+    return bt if (bt and not is_no_title(bt)) else (d.title or "")
+
+
 async def _enrich_library_doc(db: AsyncSession, doc: LibraryDoc, path: str, text: str) -> None:
     """Делает обложку из первой страницы PDF и определяет настоящее название книги (ИИ).
     Выполняется после коммита — соединение БД свободно во время тяжёлой работы."""
@@ -1945,7 +1953,7 @@ async def list_library_docs(
     return [
         {
             "id": d.id,
-            "title": d.book_title or d.title,  # показываем настоящее название книги, если распознано
+            "title": _display_title(d),  # настоящее название (не мусор) или подпись преподавателя
             "label": d.title,  # как назвал преподаватель
             "book_title": d.book_title,
             "has_cover": bool(d.has_cover),
@@ -1969,7 +1977,7 @@ async def get_library_doc(db: AsyncSession, doc_id: int, allow_pending: bool = F
     is_pdf = (d.filename or "").lower().endswith(".pdf")
     return {
         "id": d.id,
-        "title": d.book_title or d.title,
+        "title": _display_title(d),
         "label": d.title,
         "book_title": d.book_title,
         "has_cover": bool(d.has_cover),
@@ -2067,7 +2075,8 @@ async def backfill_covers(db: AsyncSession, limit: int = 500) -> int:
             continue
         is_pdf = (d.filename or "").lower().endswith(".pdf")
         need_cover = is_pdf  # пере-рендерим обложку (чинит пустые/устаревшие)
-        need_title = not d.book_title
+        # распознаём название, если его нет ИЛИ сохранён мусор («Пустая строка.» и т.п.)
+        need_title = (not d.book_title) or ai.is_no_title(d.book_title)
         path, text = d.path, (d.text or "")
         await db.rollback()  # освобождаем соединение на время рендера/ИИ
         if not (need_cover or need_title):
@@ -2081,8 +2090,6 @@ async def backfill_covers(db: AsyncSession, limit: int = 500) -> int:
                 bt = await ai.detect_book_meta(text)
             except Exception:
                 bt = ""
-        if not (cover or bt):
-            continue
         d2 = await db.get(LibraryDoc, did)
         if d2 is None:
             continue
@@ -2091,8 +2098,11 @@ async def backfill_covers(db: AsyncSession, limit: int = 500) -> int:
             with open(_cover_path(did), "wb") as f:
                 f.write(cover)
             d2.has_cover = True
-        if bt:
-            d2.book_title = bt[:300]
+        if need_title:
+            # хорошее название — ставим; иначе чистим мусор → покажется подпись преподавателя
+            new_val = bt[:300] if bt else None
+            if d2.book_title != new_val:
+                d2.book_title = new_val
         await db.commit()
         done += 1
     return done

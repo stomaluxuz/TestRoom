@@ -35,6 +35,14 @@ async def test_upload_makes_cover_and_detects_title(db, monkeypatch):
     assert info["title"] == doc.book_title and info["has_cover"] is True
 
 
+def test_is_no_title_filters_junk():
+    from app.ai import is_no_title
+    for junk in ["Пустая строка.", "НЕТ", "нет", "unknown", "—", "", "n/a", "Без названия"]:
+        assert is_no_title(junk) is True
+    for good in ["Терапевтическая стоматология", "Бухоро тарихи", "Греко-бактрийское царство"]:
+        assert is_no_title(good) is False
+
+
 async def test_pdf_doc_omits_heavy_text(db):
     # Для PDF текст не отдаём (он на мегабайты и не нужен — книга рисуется из файла).
     d = await _make_doc(db, filename="book.pdf", text="x" * 10000)

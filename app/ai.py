@@ -243,6 +243,22 @@ async def chat_with_tools(messages: list[dict], lang: str, context: str, execute
     return "Готово."
 
 
+_NO_TITLE = {
+    "нет", "пусто", "пустая строка", "не удалось", "не определено", "без названия",
+    "неизвестно", "unknown", "none", "n/a", "na", "null", "-", "—", "no",
+}
+
+
+def is_no_title(s: str) -> bool:
+    """True, если строка — это «отказ»/мусор, а не настоящее название книги."""
+    s2 = " ".join((s or "").split()).strip('"«».').lower()
+    if not s2 or len(s2) <= 2 or len(s2) >= 200:
+        return True
+    if s2 in _NO_TITLE:
+        return True
+    return ("пустая строка" in s2) or ("не удалось" in s2) or ("определить" in s2 and "нельзя" in s2)
+
+
 async def detect_book_meta(sample_text: str) -> str:
     """По началу документа определяет НАСТОЯЩЕЕ название книги (как на обложке/титуле).
     Возвращает название или '' если определить нельзя / ИИ недоступен."""
@@ -252,16 +268,16 @@ async def detect_book_meta(sample_text: str) -> str:
     prompt = (
         "Ниже — начало учебного документа (титул/первые страницы). Определи НАСТОЯЩЕЕ название "
         "книги или материала так, как оно указано на обложке/титуле. Верни ТОЛЬКО название одной "
-        "строкой — без кавычек, без слова «Название», без автора и пояснений. Если определить "
-        "нельзя — верни пустую строку.\n\n"
+        "строкой — без кавычек, без слова «Название», без автора и пояснений. "
+        "Если название определить невозможно — ответь РОВНО одним словом: НЕТ\n\n"
         f"{sample}"
     )
     try:
-        title = await _ask("Ты точно извлекаешь название книги. Отвечай только названием.", prompt, max_tokens=60)
+        title = await _ask("Ты точно извлекаешь название книги. Отвечай только названием или словом НЕТ.", prompt, max_tokens=60)
     except Exception:
         return ""
-    title = " ".join((title or "").split()).strip('"«»')
-    return title[:200] if 2 < len(title) < 200 else ""
+    title = " ".join((title or "").split()).strip('"«».')
+    return "" if is_no_title(title) else title[:200]
 
 
 async def chat_answer(messages: list[dict], lang: str = "ru", context: str = "") -> str:
