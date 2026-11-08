@@ -104,8 +104,8 @@ class Settings:
     tz_offset_hours: int = field(default_factory=lambda: int(os.getenv("TZ_OFFSET_HOURS", "5")))
 
     # Сколько генераций (презентация/тест) обрабатывать ОДНОВРЕМЕННО. Остальные ждут в очереди —
-    # чтобы при наплыве сервер (1 ГБ) не падал по памяти. Поднимайте при более мощном сервере.
-    max_concurrent_gen: int = field(default_factory=lambda: int(os.getenv("MAX_CONCURRENT_GEN", "5")))
+    # чтобы при наплыве сервер не падал по памяти. Значение под ~2 ГБ RAM; на мощнее — поднимайте.
+    max_concurrent_gen: int = field(default_factory=lambda: int(os.getenv("MAX_CONCURRENT_GEN", "8")))
 
     # Папка для файлов электронной библиотеки. По умолчанию — рядом с файлом базы
     # (на хостинге — /var/lib/testroom/library, переживает деплой; локально — ./library).

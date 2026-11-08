@@ -270,7 +270,8 @@ async def gather_candidates(query: str, domain: str, client, limit: int = 6,
         out: list[dict] = []
         for c, d in zip(uniq, datas):
             if isinstance(d, bytes) and d:
-                vb, ah = _thumb_and_hash(d)  # None, если это не картинка (HTML-ошибка, битый файл)
+                # Pillow-декод/уменьшение — CPU; в поток, чтобы не блокировать loop на пачке фото
+                vb, ah = await asyncio.to_thread(_thumb_and_hash, d)
                 if not vb:
                     continue
                 if ah is not None and any(_hamming(ah, h) <= 6 for h in seen_hash):

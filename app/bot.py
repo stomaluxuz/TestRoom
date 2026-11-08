@@ -1224,7 +1224,8 @@ async def present_example_cmd(message: Message):
 async def present_build(message: Message, state: FSMContext):
     await state.clear()
     try:
-        name, data = build_pptx(message.text)
+        # сборка .pptx — тяжёлая синхронная работа; в поток, чтобы не блокировать loop
+        name, data = await asyncio.to_thread(build_pptx, message.text)
     except svc.ServiceError as e:
         return await message.answer("❌ " + escape(e.message))
     await message.answer_document(
@@ -1304,7 +1305,8 @@ async def up_subject(cb: CallbackQuery, state: FSMContext):
 
 async def _parse_from_state(bot: Bot, data: dict):
     buf = await bot.download(data["file_id"])
-    return parse_file(data["file_name"], buf.read())
+    # разбор файла (docx/xlsx/pdf) — синхронный и может быть тяжёлым; уводим в поток
+    return await asyncio.to_thread(parse_file, data["file_name"], buf.read())
 
 
 @router.message(Upload.title, F.text)

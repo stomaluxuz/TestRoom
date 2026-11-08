@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 
@@ -386,4 +387,6 @@ async def build_presentation(
         async with httpx.AsyncClient(follow_redirects=True) as client:
             await illustrate_slides(slides, domain, client, max_per_slide=max_per_slide)
     from . import themes  # тематическое оформление: цвет подбирается авто по теме + бренд TestRoom
-    return themes.assemble_themed(title, subtitle, slides, sources=sources)
+    # Сборка .pptx (python-pptx) — тяжёлая синхронная работа; уводим в поток, чтобы не
+    # блокировать event loop (иначе на время сборки «подвисают» бот и приложение для всех).
+    return await asyncio.to_thread(themes.assemble_themed, title, subtitle, slides, sources=sources)
