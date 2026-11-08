@@ -62,6 +62,15 @@ SYSTEM_TEST = (
     "D) Недостаток витамина C"
 )
 
+SYSTEM_CHAT = (
+    "Ты — умный учебный ИИ-ассистент для студентов и преподавателей (в т.ч. медицина и "
+    "стоматология). Помогай учиться: объясняй темы, отвечай на вопросы, помогай с задачами. "
+    "Если ниже приведены выдержки из библиотеки — опирайся на них как на главный источник фактов "
+    "и будь точен. Если в выдержках ответа нет, можешь ответить по общим знаниям, но честно "
+    "предупреди, что в загруженных материалах этого нет. Не выдумывай факты и не ссылайся на "
+    "несуществующие источники. Отвечай кратко, по делу и дружелюбно."
+)
+
 
 # Языки генерации
 _LANGS = {
@@ -116,6 +125,37 @@ async def _ask(system: str, prompt: str, max_tokens: int = 4000) -> str:
     except anthropic.APIConnectionError:
         raise _err("Нет связи с ИИ. Проверьте интернет и попробуйте ещё раз.", 502)
     return "".join(b.text for b in msg.content if b.type == "text").strip()
+
+
+async def chat_answer(messages: list[dict], lang: str = "ru", context: str = "") -> str:
+    """Многоходовый ответ ИИ-ассистента (чат). messages — [{role: user/assistant, content}].
+    context — выдержки из библиотеки (RAG), если нашлись."""
+    if not settings.anthropic_api_key:
+        raise _err("ИИ пока не подключён. Обратитесь к администратору.", 403)
+    system = SYSTEM_CHAT + "\n\n" + _lang_instr(lang)
+    if context:
+        system += "\n\n" + _context_block(context)
+    msgs = [
+        {"role": m["role"], "content": str(m["content"])[:4000]}
+        for m in messages
+        if m.get("content") and m.get("role") in ("user", "assistant")
+    ][-10:]  # ограничиваем историю (цена/контекст)
+    if not msgs:
+        raise _err("Пустой запрос.")
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    try:
+        resp = await client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=1200,
+            output_config={"effort": "low"},
+            system=system,
+            messages=msgs,
+        )
+    except anthropic.APIStatusError as e:
+        raise _err(f"ИИ недоступен ({e.status_code}). Попробуйте позже.", 502)
+    except anthropic.APIConnectionError:
+        raise _err("Нет связи с ИИ. Проверьте интернет и попробуйте ещё раз.", 502)
+    return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
 async def generate_slides(topic: str, slides: int = 8, lang: str = "ru", context: str = "") -> str:

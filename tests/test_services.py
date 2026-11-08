@@ -669,6 +669,26 @@ async def test_pro_plus_grant_and_gate(db):
         svc.require_pro_plus(u)
 
 
+async def test_ai_chat_requires_pro_plus(db):
+    u = await make_student(db, 910)
+    with pytest.raises(svc.ServiceError):
+        await svc.ai_chat(db, u, [{"role": "user", "content": "привет"}])
+
+
+async def test_ai_chat_pro_plus_flow(db, monkeypatch):
+    from app import ai as ai_mod
+    u = await make_student(db, 911)
+    await svc.give_pro_plus(db, u.id, 30)
+
+    async def fake_chat(messages, lang="ru", context=""):
+        return "Это ответ ассистента."
+
+    monkeypatch.setattr(ai_mod, "chat_answer", fake_chat)
+    r = await svc.ai_chat(db, u, [{"role": "user", "content": "что такое кариес"}], "ru")
+    assert r["answer"] == "Это ответ ассистента."
+    assert "sources" in r and "found" in r
+
+
 async def test_admin_stats(db):
     t = await make_teacher(db)
     await make_test(db, t, 2)

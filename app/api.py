@@ -211,6 +211,11 @@ class ProIn(BaseModel):
     days: int = Field(30, ge=1, le=3650)
 
 
+class ChatIn(BaseModel):
+    messages: list[dict] = []
+    lang: str = "ru"
+
+
 class BlockIn(BaseModel):
     blocked: bool
 
@@ -552,6 +557,11 @@ def create_app() -> FastAPI:
         media = mimetypes.guess_type(name)[0] or "application/octet-stream"
         # FileResponse сам поддерживает HTTP Range → PDF.js тянет только нужные страницы.
         return FileResponse(path, media_type=media, headers={"Cache-Control": "private, max-age=600"})
+
+    @app.post("/api/ai/chat")
+    async def ai_chat_ep(body: ChatIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """ИИ-чат «спроси базу» — только для Pro+ (проверка внутри svc.ai_chat)."""
+        return await svc.ai_chat(db, user, body.messages or [], body.lang or "ru")
 
     @app.get("/api/library/docs/{doc_id}/progress")
     async def library_progress_get(

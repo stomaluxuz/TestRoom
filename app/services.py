@@ -185,6 +185,27 @@ def require_pro_plus(user: User):
     raise ServiceError("Эта функция доступна только с подпиской Pro+.", 402)
 
 
+async def ai_chat(db: AsyncSession, user: User, messages: list[dict], lang: str = "ru") -> dict:
+    """ИИ-чат «спроси базу» (только Pro+): отвечает с опорой на библиотеку (RAG) + ссылки на источник."""
+    from . import ai
+    from . import limits
+
+    require_pro_plus(user)
+    msgs = [
+        {"role": m.get("role"), "content": str(m.get("content") or "")[:4000]}
+        for m in (messages or [])
+        if m.get("content") and m.get("role") in ("user", "assistant")
+    ]
+    if not msgs or msgs[-1]["role"] != "user":
+        raise ServiceError("Напишите вопрос.")
+    query = msgs[-1]["content"]
+    ctx = await library_context(db, query)
+    await db.rollback()  # не держим соединение БД во время обращения к ИИ
+    async with limits.gen_slot():
+        answer = await ai.chat_answer(msgs[-10:], lang=lang, context=ctx.get("context", ""))
+    return {"answer": answer, "sources": ctx.get("sources", []), "found": ctx.get("found", False)}
+
+
 def require_teacher(user: User):
     if not user.is_teacher:
         raise ServiceError("Создавать комнаты для группы могут только преподаватели.", 403)

@@ -63,6 +63,9 @@ const T = {
     test_running: "Идёт тест", code: "код", time_left: "осталось",
     my_tests: "Мои тесты", upload_test: "Загрузить тест", history: "История запусков",
     take_by_code: "Пройти тест по коду", admin_panel: "Админ-панель", become_student: "Стать студентом",
+    ai_assistant: "ИИ-помощник", ai_hint: "Задайте вопрос — отвечу с опорой на библиотеку и укажу источник.",
+    ai_start: "Напишите свой вопрос — например «объясни, что такое пульпит».", ai_ph: "Ваш вопрос…",
+    ai_proplus_only: "💎 ИИ-помощник доступен только с подпиской Pro+.", ai_src: "Источники",
     upload_via_bot: "Тест можно загрузить и через бота: просто отправьте ему файл.",
     question: "Вопрос", of: "из", answer: "Ответить", correct_excl: "✓ Верно!", wrong_excl: "✗ Неверно",
     show_result: "Показать результат", next: "Дальше →",
@@ -153,6 +156,9 @@ const T = {
     test_running: "Test ketmoqda", code: "kod", time_left: "qoldi",
     my_tests: "Mening testlarim", upload_test: "Test yuklash", history: "Ishga tushirishlar tarixi",
     take_by_code: "Kod bo'yicha test yechish", admin_panel: "Admin-panel", become_student: "Student bo'lish",
+    ai_assistant: "AI-yordamchi", ai_hint: "Savol bering — kutubxonaga tayanib javob beraman va manbani ko'rsataman.",
+    ai_start: "Savolingizni yozing — masalan «pulpit nima?».", ai_ph: "Savolingiz…",
+    ai_proplus_only: "💎 AI-yordamchi faqat Pro+ obunasida mavjud.", ai_src: "Manbalar",
     upload_via_bot: "Testni bot orqali ham yuklash mumkin: shunchaki faylni yuboring.",
     question: "Savol", of: "dan", answer: "Javob berish", correct_excl: "✓ To'g'ri!", wrong_excl: "✗ Noto'g'ri",
     show_result: "Natijani ko'rsatish", next: "Keyingi →",
@@ -243,6 +249,9 @@ const T = {
     test_running: "Test in progress", code: "code", time_left: "left",
     my_tests: "My tests", upload_test: "Upload test", history: "Launch history",
     take_by_code: "Take a test by code", admin_panel: "Admin panel", become_student: "Switch to student",
+    ai_assistant: "AI assistant", ai_hint: "Ask a question — I answer from the library and cite the source.",
+    ai_start: "Type your question — e.g. \"explain what pulpitis is\".", ai_ph: "Your question…",
+    ai_proplus_only: "💎 AI assistant is available only with Pro+.", ai_src: "Sources",
     upload_via_bot: "You can also upload a test via the bot: just send it the file.",
     question: "Question", of: "of", answer: "Answer", correct_excl: "✓ Correct!", wrong_excl: "✗ Wrong",
     show_result: "Show result", next: "Next →",
@@ -1099,6 +1108,7 @@ async function teacherHome() {
     <div class="item" id="tests"><span class="ico">📚</span><div class="grow">${t("my_tests")}</div></div>
     <div class="item" id="upload"><span class="ico">📤</span><div class="grow">${t("upload_test")}</div></div>
     <div class="item" id="history"><span class="ico">🕘</span><div class="grow">${t("history")}</div></div>
+    <div class="item" id="aichat"><span class="ico">💬</span><div class="grow">${t("ai_assistant")}</div>${ME.is_pro_plus || ME.is_admin ? "" : `<span class="badge pro">Pro+</span>`}<span class="muted">›</span></div>
     <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
     <div class="item" id="libupload"><span class="ico">⬆️</span><div class="grow">${libT().upload}</div></div>
     <div class="item" id="profile"><span class="ico">👤</span><div class="grow">${t("profile")}</div><span class="muted">›</span></div>
@@ -1115,6 +1125,7 @@ async function teacherHome() {
   on("#tests", "click", () => go(testsScreen));
   on("#upload", "click", () => go(uploadScreen));
   on("#history", "click", () => go(historyScreen));
+  on("#aichat", "click", () => go(aiChatScreen));
   on("#library", "click", () => go(libraryScreen));
   on("#libupload", "click", () => go(libraryUploadScreen));
   on("#profile", "click", () => go(profileScreen));
@@ -1884,5 +1895,46 @@ function adminTeacherScreen({ t }) {
     try { tg ? tg.openLink(u) : window.open(u, "_blank"); } catch (_) { window.open(u, "_blank"); }
   });
 })();
+
+/* ---------------------------------------------------------------- ИИ-чат (Pro+) */
+let _aichat = [];
+function aiChatScreen() {
+  if (!(ME.is_pro_plus || ME.is_admin)) {
+    render(`<h1>💬 ${t("ai_assistant")}</h1><div class="card"><p>${t("ai_proplus_only")}</p></div>`);
+    return;
+  }
+  _aichat = [];
+  drawAiChat(false);
+}
+function drawAiChat(loading) {
+  const rows = _aichat.map(m => m.role === "user"
+    ? `<div class="chatrow you"><div class="bubble you">${esc(m.content)}</div></div>`
+    : `<div class="chatrow ai"><div class="bubble ai">${esc(m.content).replace(/\n/g, "<br>")}</div>${m.sources && m.sources.length ? `<div class="muted small chsrc">📄 ${t("ai_src")}: ${m.sources.map(esc).join(" · ")}</div>` : ""}</div>`
+  ).join("");
+  render(`
+    <h1>💬 ${t("ai_assistant")}</h1>
+    <p class="muted small" style="margin:-4px 0 10px">${t("ai_hint")}</p>
+    <div id="chatbox" class="chatbox">${rows || `<div class="muted small" style="padding:8px">${t("ai_start")}</div>`}${loading ? `<div class="chatrow ai"><div class="bubble ai muted">… <span class="spin"></span></div></div>` : ""}</div>
+    <div class="chatinput"><textarea id="q" rows="2" placeholder="${t("ai_ph")}"></textarea><button class="btn" id="send" ${loading ? "disabled" : ""}>➤</button></div>
+  `);
+  const box = document.getElementById("chatbox"); if (box) box.scrollTop = box.scrollHeight;
+  const send = async () => {
+    if (loading) return;
+    const ta = document.getElementById("q"); const txt = (ta && ta.value || "").trim();
+    if (!txt) return;
+    _aichat.push({ role: "user", content: txt });
+    drawAiChat(true);
+    try {
+      const r = await api("/api/ai/chat", { json: { messages: _aichat.map(m => ({ role: m.role, content: m.content })), lang: LANG } });
+      _aichat.push({ role: "assistant", content: r.answer || "—", sources: r.sources || [] });
+    } catch (e) {
+      _aichat.push({ role: "assistant", content: "❌ " + e.message, sources: [] });
+    }
+    drawAiChat(false);
+  };
+  on("#send", "click", send);
+  const ta = document.getElementById("q");
+  if (ta) ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+}
 
 boot();
