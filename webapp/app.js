@@ -417,10 +417,25 @@ async function boot() {
     render(`<div class="center"><p>${esc(e.message)}</p><button class="btn" onclick="location.reload()">${t("retry")}</button></div>`);
     return;
   }
-  // Единый язык с ботом: берём сохранённый язык пользователя из БД.
-  if (ME && ["ru", "uz", "en"].includes(ME.lang)) {
-    LANG = ME.lang;
-    try { localStorage.setItem("lang", ME.lang); } catch (e) {}
+  // Единый язык бота и приложения.
+  // Прежний выбор языка в приложении хранился ТОЛЬКО локально (в телефоне) и на
+  // сервер не попадал. Поэтому при первом входе после обновления делаем разовую
+  // миграцию: если локальный выбор отличается от языка на сервере — переносим
+  // локальный на сервер (это прежний выбор пользователя), и бот встаёт на тот же
+  // язык. Дальше источник правды — сервер (общий с ботом).
+  if (ME) {
+    const serverLang = ["ru", "uz", "en"].includes(ME.lang) ? ME.lang : "ru";
+    let localLang = null, synced = null;
+    try { localLang = localStorage.getItem("lang"); synced = localStorage.getItem("langSynced"); } catch (e) {}
+    if (!synced && ["ru", "uz", "en"].includes(localLang) && localLang !== serverLang) {
+      LANG = localLang;
+      ME.lang = localLang;
+      api("/api/me/lang", { json: { lang: localLang } }).catch(() => {});
+    } else {
+      LANG = serverLang;
+      try { localStorage.setItem("lang", serverLang); } catch (e) {}
+    }
+    try { localStorage.setItem("langSynced", "1"); } catch (e) {}
   }
   updateActBar();
   if (!ME.full_name) go(nameScreen); else home();
