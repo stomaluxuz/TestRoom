@@ -127,12 +127,6 @@ class Pay(StatesGroup):
     receipt = State()  # ждём скриншот чека после «Я оплатил»
 
 
-BTN_PRES = "🖥 Создать презентацию"
-BTN_TEST = "📝 Создать тест"
-BTN_BALANCE = "💰 Мой баланс"
-BTN_TOPUP = "💳 Пополнить баланс"
-
-
 def _money(n: int) -> str:
     """Сумма в сумах с разделителями: 25000 → «25 000 сум»."""
     return f"{int(n or 0):,}".replace(",", " ") + " сум"
@@ -226,20 +220,13 @@ def menu_keyboard(user: User) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def role_choice_keyboard() -> InlineKeyboardMarkup:
+def role_choice_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎓 Я студент", callback_data="role:student")],
-            [InlineKeyboardButton(text="👨‍🏫 Я преподаватель", callback_data="apply")],
+            [InlineKeyboardButton(text=L("role_btn_student", lang), callback_data="role:student")],
+            [InlineKeyboardButton(text=L("role_btn_teacher", lang), callback_data="apply")],
         ]
     )
-
-
-ROLE_CHOICE_TEXT = (
-    "Кто вы? Роль можно сменить в любой момент.\n\n"
-    "🎓 <b>Студент</b> — проходит тесты по коду и может прорешать свой тест для тренировки.\n"
-    "👨‍🏫 <b>Преподаватель</b> — создаёт тесты и проводит их для группы по коду."
-)
 
 # Инструкция по боту на узбекском (для преподавателей). Скриншоты — если положить
 # картинки в папку guide/ рядом с проектом (01.jpg, 02.jpg …), бот пришлёт их альбомом.
@@ -295,18 +282,9 @@ async def send_qollanma(message: Message) -> None:
 
 def menu_text(user: User) -> str:
     name = escape(user.full_name or "")
-    if user.is_teacher:
-        return (
-            f"👨‍🏫 <b>{name}</b>, вы преподаватель.\n\n"
-            "• Откройте приложение, чтобы запустить тест для группы по коду и смотреть результаты.\n"
-            "• Чтобы добавить тест, просто отправьте сюда файл (.docx, .xlsx или .txt)."
-        )
-    return (
-        f"🎓 <b>{name}</b>, вы студент.\n\n"
-        "• Когда преподаватель назовёт код — откройте приложение и введите его.\n"
-        "• Можно загрузить свой тест файлом и прорешать его для тренировки.\n"
-        "• Хотите проводить тесты для группы — нажмите «Стать преподавателем»."
-    )
+    lang = getattr(user, "lang", None) or "ru"
+    key = "menu_teacher" if user.is_teacher else "menu_student"
+    return L(key, lang).format(name=name)
 
 
 async def send_menu(message: Message, user: User):
@@ -413,15 +391,12 @@ async def make_test_start(message: Message, state: FSMContext):
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
         price = 0 if svc.is_free_user(user) else await svc.get_price(db, "test")
+    lang = getattr(user, "lang", None) or "ru"
     _remember(message.chat.id, message.message_id)
     await state.set_state(MakeTest.topic)
-    hint = f"\n\n💳 Стоимость: {_money(price)} (спишется с баланса при создании)." if price else ""
-    await _say(
-        message,
-        "📝 Напишите <b>тему теста</b> (например: «Кариес» или «Кости черепа»).\n"
-        "Или пришлите <b>файл</b> (PDF, Word, PowerPoint, TXT) либо вставьте <b>текст</b> — "
-        "тогда составлю вопросы <b>строго по вашему материалу</b>." + hint,
-    )
+    await state.update_data(ui_lang=lang)
+    hint = L("price_hint", lang).format(amount=_money(price)) if price else ""
+    await _say(message, L("t_topic_prompt", lang) + hint)
 
 
 # Порог: длинный текст считаем прикреплённым материалом, а не темой.
@@ -432,39 +407,38 @@ MATERIAL_EXT = (".pdf", ".docx", ".pptx", ".txt")
 @router.message(MakeTest.topic, F.text)
 async def make_test_topic(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
+    data = await state.get_data()
+    ui = data.get("ui_lang", "ru")
     txt = (message.text or "").strip()
     if len(txt) >= MATERIAL_TEXT_MIN:
         # Пользователь вставил содержание темы — делаем тест строго по нему.
         await state.update_data(topic=_short_title(txt), material=txt, strict=True)
-        note = "📄 Принял текст как материал — составлю строго по нему. "
+        note = L("t_material_note", ui)
     else:
         await state.update_data(topic=txt, material="", strict=False)
         note = ""
     await state.set_state(MakeTest.lang)
-    await _say(message, note + "На каком <b>языке</b> составить тест?", reply_markup=lang_kb("tlang"))
+    await _say(message, note + L("t_lang_q", ui), reply_markup=lang_kb("tlang"))
 
 
 @router.message(MakeTest.topic, F.document)
 async def make_test_material_file(message: Message, state: FSMContext, bot: Bot):
     """В шаге выбора темы можно прислать файл (PDF/Word/PowerPoint/TXT) как материал для теста."""
     _remember(message.chat.id, message.message_id)
+    ui = (await state.get_data()).get("ui_lang", "ru")
     name = message.document.file_name or ""
     if not name.lower().endswith(MATERIAL_EXT):
-        return await _say(
-            message,
-            "Пришлите файл <b>.pdf</b>, <b>.docx</b>, <b>.pptx</b> или <b>.txt</b> — "
-            "или напишите тему текстом.",
-        )
+        return await _say(message, L("t_file_wrong_ext", ui))
     if (message.document.file_size or 0) > 10 * 1024 * 1024:
-        return await _say(message, "Файл больше 10 МБ.")
-    wait = await _say(message, "⏳ Читаю файл…")
+        return await _say(message, L("file_too_big", ui))
+    wait = await _say(message, L("reading_file", ui))
     try:
         buf = await bot.download(message.document.file_id)
         text = await asyncio.to_thread(extract_document_text, name, buf.read())
     except ParseFailed as e:
         return await _say(message, "❌ " + escape(str(e)))
     except Exception:
-        return await _say(message, "❌ Не удалось прочитать файл. Пришлите другой или напишите тему.")
+        return await _say(message, L("file_read_fail", ui))
     finally:
         try:
             await wait.delete()
@@ -472,37 +446,31 @@ async def make_test_material_file(message: Message, state: FSMContext, bot: Bot)
             pass
     text = (text or "").strip()
     if len(text) < 30:
-        return await _say(
-            message,
-            "В файле не нашлось текста (возможно, это скан-картинки). "
-            "Пришлите текстовый файл или напишите тему вручную.",
-        )
+        return await _say(message, L("file_no_text", ui))
     await state.update_data(topic=_short_title(name.rsplit(".", 1)[0]), material=text, strict=True)
     await state.set_state(MakeTest.lang)
-    await _say(
-        message,
-        f"📄 Принял материал ({len(text)} символов) — составлю тест строго по нему. "
-        "На каком <b>языке</b>?",
-        reply_markup=lang_kb("tlang"),
-    )
+    await _say(message, L("t_material_accepted", ui).format(n=len(text)), reply_markup=lang_kb("tlang"))
 
 
 @router.callback_query(MakeTest.lang, F.data.regexp(r"^tlang:(ru|uz|en)$"))
 async def make_test_lang(cb: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    ui = data.get("ui_lang", "ru")
     await state.update_data(lang=cb.data.split(":")[1])
     await state.set_state(MakeTest.count)
-    await _say(cb.message, "Сколько вопросов сделать? Напишите число (например 10, максимум 40).")
+    await _say(cb.message, L("t_count_q", ui))
     await cb.answer()
 
 
 @router.message(MakeTest.count, F.text)
 async def make_test_count(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
+    data = await state.get_data()
+    ui = data.get("ui_lang", "ru")
     digits = "".join(ch for ch in message.text if ch.isdigit())
     if not digits:
-        return await _say(message, "Напишите число, например 10.")
+        return await _say(message, L("num_prompt", ui))
     n = max(1, min(int(digits), 40))
-    data = await state.get_data()
     topic, lang = data.get("topic", ""), data.get("lang", "ru")
     material = data.get("material", "")
     strict = bool(data.get("strict"))
@@ -514,11 +482,11 @@ async def make_test_count(message: Message, state: FSMContext):
             charged = await svc.charge_feature(db, user, "test")
         except svc.ServiceError as e:
             await state.clear()
-            return await message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb())
-    qn = " Много запросов — вы в очереди, подождите." if limits.queued() else ""
-    src_note = " по вашему материалу" if material else ""
+            return await message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb(ui))
+    qn = L("queue_note", ui) if limits.queued() else ""
+    src_note = L("t_src_material", ui) if material else ""
     label = f"«{escape(topic)}»" if topic else ""
-    wait = await _say(message, f"⏳ Генерирую тест {label} на {n} вопросов{src_note}…" + qn)
+    wait = await _say(message, L("t_generating", ui).format(label=label, n=n, src=src_note) + qn)
     ctx = None
     try:
         async with limits.gen_slot():
@@ -540,7 +508,7 @@ async def make_test_count(message: Message, state: FSMContext):
     if not questions:
         await _refund(message.from_user, charged)
         await state.clear()
-        return await message.answer("❌ Не получилось собрать тест, попробуйте другую тему.")
+        return await message.answer(L("t_build_fail", ui))
     qs = [{"text": q.text, "options": q.options, "correct": q.correct} for q in questions]
     try:
         await wait.delete()
@@ -549,21 +517,18 @@ async def make_test_count(message: Message, state: FSMContext):
     # 1) сразу отправляем тест в Word
     title = _short_title(topic)
     name, blob = build_test_docx(title, qs)
-    note = "" if len(qs) >= n else f" (запрашивали {n}, собрано {len(qs)})"
-    paid = f" Списано {_money(charged)}." if charged else ""
-    src = ("\n📄 Строго по вашему материалу" if material else _rag_note(ctx, lang))
+    note = "" if len(qs) >= n else L("t_count_note", ui).format(n=n, count=len(qs))
+    paid = L("paid_note", ui).format(amount=_money(charged)) if charged else ""
+    src = (L("t_src_strict", ui) if material else _rag_note(ctx, ui))
     await message.answer_document(
         BufferedInputFile(blob, name),
-        caption=f"📄 Готово — {len(qs)} вопросов{note}.{paid} Проверьте файл.{src}",
+        caption=L("t_result_caption", ui).format(count=len(qs), note=note, paid=paid, src=src),
     )
     if not is_teacher:
         # Студенту отдаём ТОЛЬКО файл — в приложении тест не сохраняется (запуск для группы — у преподавателей).
         await state.clear()
         await _sweep(message.bot, message.chat.id)
-        return await message.answer(
-            "Это ваш файл для учёбы 📚 В приложении тест не сохраняется — "
-            "запускать тесты для группы могут только преподаватели."
-        )
+        return await message.answer(L("t_student_note", ui))
     # 2) преподаватель: спрашиваем предмет из списка и сохраняем в приложение
     await state.update_data(questions=qs, title=title)
     await state.set_state(MakeTest.subject)
@@ -571,20 +536,21 @@ async def make_test_count(message: Message, state: FSMContext):
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
         subjects = await svc.list_subjects(db, user)
     rows = [[InlineKeyboardButton(text=s["name"], callback_data=f"tsubj:{s['id']}")] for s in subjects]
-    rows.append([InlineKeyboardButton(text="➕ Новый предмет", callback_data="tsubj_new")])
+    rows.append([InlineKeyboardButton(text=L("btn_new_subject", ui), callback_data="tsubj_new")])
     await _say(
         message,
-        "В какой <b>предмет</b> сохранить этот тест?",
+        L("t_subject_q", ui),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
 
 async def _save_ai_test(reply_to: Message, from_user, state: FSMContext, subject_id: int):
     data = await state.get_data()
+    ui = data.get("ui_lang", "ru")
     qs, title = data.get("questions") or [], data.get("title", "Без названия")
     await state.clear()
     if not qs:
-        return await reply_to.answer("Данные теста устарели, создайте заново.")
+        return await reply_to.answer(L("t_stale", ui))
     questions = [ParsedQuestion(d["text"], d["options"], d["correct"]) for d in qs]
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, from_user.id, from_user.username)
@@ -593,9 +559,9 @@ async def _save_ai_test(reply_to: Message, from_user, state: FSMContext, subject
         except svc.ServiceError as e:
             return await reply_to.answer("❌ " + escape(e.message))
     await _sweep(reply_to.bot, reply_to.chat.id)  # убираем всю служебную переписку, файл остаётся
-    kb = InlineKeyboardMarkup(inline_keyboard=[[b]] if (b := webapp_button("▶️ Открыть в приложении")) else [])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[b]] if (b := webapp_button(L("btn_open_in_app", ui))) else [])
     await reply_to.answer(
-        f"✅ Сохранено ({len(questions)} вопросов). Можно запускать в приложении.\n<i>{escape(title)}</i>",
+        L("t_saved", ui).format(count=len(questions), title=escape(title)),
         reply_markup=kb,
     )
 
@@ -608,8 +574,9 @@ async def make_test_subject(cb: CallbackQuery, state: FSMContext):
 
 @router.callback_query(MakeTest.subject, F.data == "tsubj_new")
 async def make_test_subject_new(cb: CallbackQuery, state: FSMContext):
+    ui = (await state.get_data()).get("ui_lang", "ru")
     await state.set_state(MakeTest.subject_new)
-    await _say(cb.message, "Напишите название нового предмета:")
+    await _say(cb.message, L("t_new_subject_prompt", ui))
     await cb.answer()
 
 
@@ -645,52 +612,59 @@ async def make_pres_start(message: Message, state: FSMContext):
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
         price = 0 if svc.is_free_user(user) else await svc.get_price(db, "presentation")
+    ui = getattr(user, "lang", None) or "ru"
     _remember(message.chat.id, message.message_id)
     await state.set_state(MakePres.topic)
-    hint = f"\n\n💳 Стоимость: {_money(price)} (спишется с баланса при создании)." if price else ""
-    await _say(message, "🖥 Напишите <b>тему презентации</b> (например: «Анатомия сердца»)." + hint)
+    await state.update_data(ui_lang=ui)
+    hint = L("price_hint", ui).format(amount=_money(price)) if price else ""
+    await _say(message, L("p_topic_prompt", ui) + hint)
 
 
 @router.message(MakePres.topic, F.text)
 async def make_pres_topic(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
+    ui = (await state.get_data()).get("ui_lang", "ru")
     await state.update_data(topic=message.text.strip())
     await state.set_state(MakePres.lang)
-    await _say(message, "На каком <b>языке</b> сделать презентацию?", reply_markup=lang_kb("plang"))
+    await _say(message, L("p_lang_q", ui), reply_markup=lang_kb("plang"))
 
 
 @router.callback_query(MakePres.lang, F.data.regexp(r"^plang:(ru|uz|en)$"))
 async def make_pres_lang(cb: CallbackQuery, state: FSMContext):
+    ui = (await state.get_data()).get("ui_lang", "ru")
     await state.update_data(lang=cb.data.split(":")[1])
     await state.set_state(MakePres.fio)
-    await _say(cb.message, "Напишите <b>ФИО</b> (кто выполнил):")
+    await _say(cb.message, L("p_fio_q", ui))
     await cb.answer()
 
 
 @router.message(MakePres.fio, F.text)
 async def make_pres_fio(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
+    ui = (await state.get_data()).get("ui_lang", "ru")
     await state.update_data(fio=message.text.strip())
     await state.set_state(MakePres.group)
-    await _say(message, "Напишите <b>номер группы</b>:")
+    await _say(message, L("p_group_q", ui))
 
 
 @router.message(MakePres.group, F.text)
 async def make_pres_group(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
+    ui = (await state.get_data()).get("ui_lang", "ru")
     await state.update_data(group=message.text.strip())
     await state.set_state(MakePres.count)
-    await _say(message, "Сколько слайдов? Напишите число (максимум 20).")
+    await _say(message, L("p_count_q", ui))
 
 
 @router.message(MakePres.count, F.text)
 async def make_pres_count(message: Message, state: FSMContext):
     _remember(message.chat.id, message.message_id)
+    data = await state.get_data()
+    ui = data.get("ui_lang", "ru")
     digits = "".join(ch for ch in message.text if ch.isdigit())
     if not digits:
-        return await _say(message, "Напишите число, например 10.")
+        return await _say(message, L("num_prompt", ui))
     n = max(1, min(int(digits), 20))
-    data = await state.get_data()
     topic, fio, group = data.get("topic", ""), data.get("fio", ""), data.get("group", "")
     lang = data.get("lang", "ru")
     await state.clear()
@@ -699,10 +673,10 @@ async def make_pres_count(message: Message, state: FSMContext):
         try:
             charged = await svc.charge_feature(db, user, "presentation")  # 0 для преподавателей
         except svc.ServiceError as e:
-            return await message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb())
+            return await message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb(ui))
         await svc.reserve_presentation(db, user)
-    note = " Много запросов — вы в очереди, подождите." if limits.queued() else ""
-    wait = await _say(message, "⏳ Генерирую презентацию и подбираю фото…" + note)
+    note = L("queue_note", ui) if limits.queued() else ""
+    wait = await _say(message, L("p_generating", ui) + note)
     try:
         async with limits.gen_slot():  # очередь: не больше N генераций разом
             async with dbmod.SessionLocal() as db, limits.timing("rag"):
@@ -732,18 +706,29 @@ async def make_pres_count(message: Message, state: FSMContext):
         await wait.delete()
     except Exception:
         pass
-    paid = f" Списано {_money(charged)}." if charged else ""
+    paid = L("paid_note", ui).format(amount=_money(charged)) if charged else ""
     await message.answer_document(
         BufferedInputFile(blob, name),
-        caption=f"Готовая презентация ✅ Тема: {escape(topic)}.{paid} Откройте в PowerPoint / Google Slides.{_rag_note(ctx, lang)}",
+        caption=L("p_result_caption", ui).format(
+            topic=escape(topic), paid=paid, src=_rag_note(ctx, ui)
+        ),
     )
     await _sweep(message.bot, message.chat.id)  # убираем служебную переписку, файл остаётся
 
 
 # ---------------------------------------------------------------- баланс и пополнение (студенты)
 
-def topup_inline_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=BTN_TOPUP, callback_data="tpopen")]])
+def topup_inline_kb(lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=btn("topup", lang), callback_data="tpopen")]]
+    )
+
+
+async def _user_lang(user_id: int) -> str:
+    """Язык интерфейса пользователя (для хендлеров без загруженного объекта)."""
+    async with dbmod.SessionLocal() as db:
+        u = await db.get(User, user_id)
+    return (getattr(u, "lang", None) or "ru") if u else "ru"
 
 
 async def _refund(from_user, amount: int):
@@ -761,24 +746,27 @@ async def balance_cmd(message: Message):
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
         cfg = await svc.get_settings(db)
+    ui = getattr(user, "lang", None) or "ru"
     if svc.is_free_user(user):
-        return await message.answer("Для преподавателей создание тестов и презентаций бесплатно ✅")
+        return await message.answer(L("b_teacher_free", ui))
     await message.answer(
-        f"💰 Ваш баланс: <b>{_money(user.balance or 0)}</b>\n\n"
-        f"Цены:\n🖥 Презентация — {_money(svc._price(cfg, 'presentation'))}\n"
-        f"📝 Тест — {_money(svc._price(cfg, 'test'))}\n\n"
-        "Пополнить — кнопка ниже или «💳 Пополнить баланс».",
-        reply_markup=topup_inline_kb(),
+        L("b_balance", ui).format(
+            balance=_money(user.balance or 0),
+            pres=_money(svc._price(cfg, "presentation")),
+            test=_money(svc._price(cfg, "test")),
+        ),
+        reply_markup=topup_inline_kb(ui),
     )
 
 
 async def _topup_amounts_kb(user_id: int, username: str | None):
-    """Клавиатура с суммами пополнения. Возвращает (kb, err): err — если пополнять не нужно."""
+    """Клавиатура с суммами пополнения. Возвращает (kb, err, lang): err — если пополнять не нужно."""
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, user_id, username)
         cfg = await svc.get_settings(db)
+    ui = getattr(user, "lang", None) or "ru"
     if svc.is_free_user(user):
-        return None, "Для преподавателей всё бесплатно — пополнять баланс не нужно ✅"
+        return None, L("b_teacher_free_topup", ui), ui
     amounts = []
     for part in (cfg.get("topup_amounts") or "").split(","):
         digits = "".join(ch for ch in part if ch.isdigit())
@@ -786,23 +774,23 @@ async def _topup_amounts_kb(user_id: int, username: str | None):
             amounts.append(int(digits))
     amounts = amounts or [10000, 25000, 50000]
     rows = [[InlineKeyboardButton(text=_money(a), callback_data=f"tpamt:{a}")] for a in amounts]
-    return InlineKeyboardMarkup(inline_keyboard=rows), None
+    return InlineKeyboardMarkup(inline_keyboard=rows), None, ui
 
 
 @router.message(F.text.in_(BTN_ALL["topup"]))
 async def topup_start(message: Message):
-    kb, err = await _topup_amounts_kb(message.from_user.id, message.from_user.username)
+    kb, err, ui = await _topup_amounts_kb(message.from_user.id, message.from_user.username)
     if err:
         return await message.answer(err)
-    await message.answer("💳 На какую сумму пополнить баланс?", reply_markup=kb)
+    await message.answer(L("b_topup_q", ui), reply_markup=kb)
 
 
 @router.callback_query(F.data == "tpopen")
 async def topup_open_cb(cb: CallbackQuery):
-    kb, err = await _topup_amounts_kb(cb.from_user.id, cb.from_user.username)
+    kb, err, ui = await _topup_amounts_kb(cb.from_user.id, cb.from_user.username)
     if err:
         return await cb.answer(err, show_alert=True)
-    await cb.message.answer("💳 На какую сумму пополнить баланс?", reply_markup=kb)
+    await cb.message.answer(L("b_topup_q", ui), reply_markup=kb)
     await cb.answer()
 
 
@@ -811,14 +799,16 @@ async def topup_amount_cb(cb: CallbackQuery):
     amount = int(cb.data.split(":")[1])
     async with dbmod.SessionLocal() as db:
         cfg = await svc.get_settings(db)
+    ui = await _user_lang(cb.from_user.id)
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✅ Я оплатил", callback_data=f"tppaid:{amount}")]]
+        inline_keyboard=[[InlineKeyboardButton(text=L("btn_paid", ui), callback_data=f"tppaid:{amount}")]]
     )
     await cb.message.answer(
-        f"💳 Пополнение на <b>{_money(amount)}</b>\n\n"
-        "Переведите эту сумму на карту (Humo/Uzcard):\n"
-        f"<code>{escape(cfg.get('card_number', ''))}</code>\n{escape(cfg.get('card_holder', ''))}\n\n"
-        "После перевода нажмите «✅ Я оплатил» и <b>обязательно</b> пришлите скриншот чека.",
+        L("b_pay_instructions", ui).format(
+            amount=_money(amount),
+            card=escape(cfg.get("card_number", "")),
+            holder=escape(cfg.get("card_holder", "")),
+        ),
         reply_markup=kb,
     )
     await cb.answer()
@@ -827,26 +817,22 @@ async def topup_amount_cb(cb: CallbackQuery):
 @router.callback_query(F.data.regexp(r"^tppaid:\d+$"))
 async def topup_paid_cb(cb: CallbackQuery, state: FSMContext):
     amount = int(cb.data.split(":")[1])
+    ui = await _user_lang(cb.from_user.id)
     await state.set_state(Pay.receipt)
-    await state.update_data(amount=amount)
-    await cb.message.answer(
-        "📸 Пришлите <b>скриншот чека</b> об оплате — это обязательно. "
-        "Без чека заявку подтвердить нельзя."
-    )
+    await state.update_data(amount=amount, ui_lang=ui)
+    await cb.message.answer(L("b_receipt_q", ui))
     await cb.answer()
 
 
 async def _submit_topup(reply_to: Message, bot: Bot, from_user, amount: int, photo_id: str | None):
-    if amount <= 0:
-        return await reply_to.answer("Сумма не распознана, начните заново: «💳 Пополнить баланс».")
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, from_user.id, from_user.username)
+        ui = getattr(user, "lang", None) or "ru"
+        if amount <= 0:
+            return await reply_to.answer(L("b_amount_lost", ui))
         topup = await svc.create_topup(db, user.id, amount)
         tid, uname = topup.id, user.full_name or "—"
-    await reply_to.answer(
-        "✅ Заявка отправлена! Админ проверит оплату и зачислит баланс — обычно это быстро. "
-        "Баланс смотрите по кнопке «💰 Мой баланс»."
-    )
+    await reply_to.answer(L("b_submitted", ui))
     kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"tpok:{tid}"),
         InlineKeyboardButton(text="❌ Отклонить", callback_data=f"tpno:{tid}"),
@@ -875,11 +861,9 @@ async def topup_receipt_photo(message: Message, state: FSMContext, bot: Bot):
 
 
 @router.message(Pay.receipt)
-async def topup_receipt_other(message: Message):
-    await message.answer(
-        "📸 Нужен именно <b>фото-скриншот чека</b> об оплате — пришлите его. "
-        "Без чека заявку подтвердить нельзя."
-    )
+async def topup_receipt_other(message: Message, state: FSMContext):
+    ui = (await state.get_data()).get("ui_lang", "ru")
+    await message.answer(L("b_receipt_need_photo", ui))
 
 
 @router.callback_query(F.data.regexp(r"^tp(ok|no):\d+$"))
@@ -923,8 +907,11 @@ async def topup_decide_cb(cb: CallbackQuery, bot: Bot):
 
 @router.message(Command("name"))
 async def change_name(message: Message, state: FSMContext):
+    async with dbmod.SessionLocal() as db:
+        user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
+    lang = getattr(user, "lang", None) or "ru"
     await state.set_state(Reg.name)
-    await message.answer("Напишите новые Фамилию и Имя:")
+    await message.answer(L("ask_new_name", lang))
 
 
 @router.message(Reg.name, F.text)
@@ -936,11 +923,12 @@ async def got_name(message: Message, state: FSMContext):
             await svc.set_full_name(db, user, message.text)
         except svc.ServiceError as e:
             return await message.answer(e.message)
+    lang = getattr(user, "lang", None) or "ru"
     await state.clear()
-    await message.answer(f"Готово, <b>{escape(user.full_name)}</b> ✅")
+    await message.answer(L("name_saved", lang).format(name=escape(user.full_name)))
     # При первой регистрации спрашиваем роль; админ сразу преподаватель.
     if first_time and not is_admin(user.id):
-        return await message.answer(ROLE_CHOICE_TEXT, reply_markup=role_choice_keyboard())
+        return await message.answer(L("role_choice", lang), reply_markup=role_choice_keyboard(lang))
     await send_menu(message, user)
 
 
