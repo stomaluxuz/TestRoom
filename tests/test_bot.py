@@ -114,6 +114,38 @@ async def test_make_test_flow_to_difficulty(bot_dp):
     assert "Сколько вопросов" in s.texts(T)[-1]  # дошли до количества
 
 
+async def test_test_generation_refunds_on_crash(bot_dp, monkeypatch):
+    """Если генерация падает неожиданно — деньги студента возвращаются, «⏳» не висит."""
+    from app.bottexts import btn
+    from app.config import settings
+
+    settings.anthropic_api_key = "x"
+    bot, dp, s = bot_dp
+    T = 8888
+    await dp.feed_update(bot, msg(T, "/start"))
+    await dp.feed_update(bot, cb(T, "setlang:ru"))
+    await dp.feed_update(bot, msg(T, "Пётр Петров"))
+    await dp.feed_update(bot, cb(T, "role:student"))
+    async with dbmod.SessionLocal() as db:
+        u = await svc.get_or_create_user(db, T)
+        u.balance = 100000  # цена теста по умолчанию 5000
+        await db.commit()
+
+    await dp.feed_update(bot, msg(T, btn("test", "ru")))
+    await dp.feed_update(bot, msg(T, "Кариес"))
+    await dp.feed_update(bot, cb(T, "tlang:ru"))
+    await dp.feed_update(bot, cb(T, "tdiff:medium"))
+
+    async def boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.bot.generate_test_questions", boom)
+    await dp.feed_update(bot, msg(T, "10"))  # запуск генерации → падение
+    assert (await get_user(T)).balance == 100000  # деньги вернулись
+    last = s.texts(T)[-1].lower()
+    assert "не удалось" in last or "не списаны" in last
+
+
 async def test_registration_role_and_upload(bot_dp):
     bot, dp, s = bot_dp
     T = 555

@@ -1,6 +1,7 @@
 """HTTP API для Mini App (учитель и студент)."""
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -371,7 +372,8 @@ def create_app() -> FastAPI:
         if len(data) > MAX_UPLOAD:
             raise svc.ServiceError("Файл больше 10 МБ.")
         try:
-            parsed = parse_file(file.filename or "", data)
+            # разбор файла — CPU-bound; уводим в поток, чтобы не подвешивать event loop
+            parsed = await asyncio.to_thread(parse_file, file.filename or "", data)
         except ParseFailed as e:
             raise svc.ServiceError(str(e))
         report = {

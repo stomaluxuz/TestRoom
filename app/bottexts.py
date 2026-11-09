@@ -261,6 +261,11 @@ _T = {
         "uz": "❌ Testni tuzib bo'lmadi, boshqa mavzuni sinab ko'ring.",
         "en": "❌ Couldn't build the test, try another topic.",
     },
+    "gen_failed": {
+        "ru": "❌ Не удалось сгенерировать (временный сбой). Средства не списаны, попробуйте ещё раз чуть позже.",
+        "uz": "❌ Hosil qilib bo'lmadi (vaqtincha nosozlik). Mablag' yechilmadi, birozdan so'ng qayta urinib ko'ring.",
+        "en": "❌ Generation failed (temporary error). You were not charged, please try again a little later.",
+    },
     "t_count_note": {
         "ru": " (запрашивали {n}, собрано {count})",
         "uz": " (so'ralgan {n}, tuzilgan {count})",

@@ -526,6 +526,16 @@ async def make_test_count(message: Message, state: FSMContext):
         await _refund(message.from_user, charged)
         await state.clear()
         return await message.answer("❌ " + escape(e.message))
+    except Exception:
+        # неожиданный сбой (сеть/SDK/парсинг): ВЕРНУТЬ деньги и не оставлять «⏳» висеть
+        log.exception("Сбой генерации теста")
+        await _refund(message.from_user, charged)
+        await state.clear()
+        try:
+            await wait.delete()
+        except Exception:
+            pass
+        return await message.answer(L("gen_failed", ui))
     if not questions:
         await _refund(message.from_user, charged)
         await state.clear()
@@ -717,12 +727,20 @@ async def make_pres_count(message: Message, state: FSMContext):
             final = f"{clean_title}\n{author}\n\n{slides_part}"
             async with limits.timing("photos+build"):
                 name, blob = await build_presentation(final, max_per_slide=2, sources=ctx.get("sources"))
-    except svc.ServiceError as e:
+    except Exception as e:
+        # вернуть деньги и снять резерв презентации при ЛЮБОМ сбое (сеть/SDK/парсинг)
+        is_svc = isinstance(e, svc.ServiceError)
+        if not is_svc:
+            log.exception("Сбой генерации презентации")
         async with dbmod.SessionLocal() as db:
             u = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
             await svc.refund(db, u, charged)  # вернуть деньги студенту
             await svc.release_presentation(db, u)
-        return await message.answer("❌ " + escape(e.message))
+        try:
+            await wait.delete()
+        except Exception:
+            pass
+        return await message.answer(("❌ " + escape(e.message)) if is_svc else L("gen_failed", ui))
     try:
         await wait.delete()
     except Exception:
