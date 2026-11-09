@@ -29,7 +29,10 @@ def _db_path() -> Path | None:
 
 
 def make_backup() -> tuple[str, bytes] | None:
-    """Целостная копия базы через SQLite backup API (корректно учитывает WAL)."""
+    """Целостная копия базы через SQLite backup API (корректно учитывает WAL).
+    Сжимаем в gzip — иначе большая база не влезает в лимит Telegram (50 МБ)."""
+    import gzip
+
     src = _db_path()
     if src is None or not src.exists():
         return None
@@ -40,13 +43,18 @@ def make_backup() -> tuple[str, bytes] | None:
             dest = sqlite3.connect(str(dst))
             try:
                 source.backup(dest)
+                try:
+                    dest.execute("VACUUM")  # убрать «пустые» страницы от удалений → файл меньше
+                except Exception:
+                    pass
             finally:
                 dest.close()
         finally:
             source.close()
-        data = dst.read_bytes()
+        raw = dst.read_bytes()
+    data = gzip.compress(raw, compresslevel=6)  # БД (текст + индексы) жмётся в разы
     stamp = datetime.now(_tz())
-    return f"testbot-backup-{stamp:%Y-%m-%d}.db", data
+    return f"testbot-backup-{stamp:%Y-%m-%d}.db.gz", data
 
 
 async def send_backup(bot) -> int:
@@ -58,7 +66,11 @@ async def send_backup(bot) -> int:
     name, data = res
     from aiogram.types import BufferedInputFile
 
-    caption = f"🗄 Резервная копия базы\n{name} · {max(1, len(data) // 1024)} КБ"
+    mb = len(data) / (1024 * 1024)
+    caption = (
+        f"🗄 Резервная копия базы (gzip)\n{name} · {mb:.1f} МБ\n"
+        "Распаковать: gunzip (или любой архиватор) → получите .db"
+    )
     sent = 0
     for admin in settings.admin_ids:
         try:
@@ -66,6 +78,8 @@ async def send_backup(bot) -> int:
             sent += 1
         except Exception:
             log.exception("Не удалось отправить бэкап админу %s", admin)
+    if not sent:
+        log.warning("Бэкап не отправлен ни одному админу (возможно, всё ещё >50 МБ: %.1f МБ)", mb)
     return sent
 
 
