@@ -2416,14 +2416,21 @@ async def index_library_doc(db: AsyncSession, doc: LibraryDoc, pace: float = 0.0
 
     if not emb.is_enabled():
         return 0
-    await _delete_doc_chunks(db, doc.id)
     chunks = emb.chunk_text(doc.text or "")
+    doc_id, subject_id = doc.id, doc.subject_id  # фиксируем до commit (expire_on_commit=False, но на всякий)
+    await _delete_doc_chunks(db, doc_id)
     if not chunks:
+        await db.commit()
+        invalidate_vec_cache()
         return 0
+    # КРИТИЧНО: фиксируем удаление и ОТПУСКАЕМ единственное соединение SQLite на время
+    # эмбеддинга (сетевой вызов по всем кускам книги). Иначе одобрение большого учебника
+    # держит БД и подвешивает бота/приложение для всех.
+    await db.commit()
     vectors = await emb.embed_texts(chunks, input_type="document", pace=pace)
     for i, (txt, vec) in enumerate(zip(chunks, vectors)):
         db.add(LibraryChunk(
-            doc_id=doc.id, subject_id=doc.subject_id, idx=i,
+            doc_id=doc_id, subject_id=subject_id, idx=i,
             text=txt, dim=len(vec), vector=emb.pack(vec),
         ))
     await db.commit()
