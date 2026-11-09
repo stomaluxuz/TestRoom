@@ -96,6 +96,9 @@ async def test_registration_role_and_upload(bot_dp):
     T = 555
 
     await dp.feed_update(bot, msg(T, "/start"))
+    # новому пользователю сначала показываем выбор языка
+    assert "язык" in s.texts(T)[-1].lower() or "language" in s.texts(T)[-1].lower()
+    await dp.feed_update(bot, cb(T, "setlang:ru"))
     assert "Фамилию и Имя" in s.texts(T)[-1]
     await dp.feed_update(bot, msg(T, "a"))  # слишком коротко
     assert "ФИО" in s.texts(T)[-1]

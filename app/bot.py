@@ -333,9 +333,12 @@ async def start(message: Message, state: FSMContext):
     if user.blocked:
         return await message.answer(L("blocked", lang))
     if not user.full_name:
+        # Новый пользователь — сперва пусть сам выберет язык (кнопки понятны на всех трёх).
+        # Reg.name ставим сразу: если он просто напишет ФИО, не нажав язык, регистрация
+        # всё равно пройдёт (на автоопределённом языке).
         await state.set_state(Reg.name)
         await state.update_data(first_time=True)
-        return await message.answer(L("welcome_name", lang))
+        return await message.answer(L("choose_language_first", lang), reply_markup=language_kb())
     await send_menu(message, user)
 
 
@@ -357,18 +360,29 @@ async def change_language(message: Message):
 
 
 @router.callback_query(F.data.startswith("setlang:"))
-async def set_language(cb: CallbackQuery):
+async def set_language(cb: CallbackQuery, state: FSMContext):
     lang = cb.data.split(":", 1)[1]
     if lang not in ("uz", "ru", "en"):
         return await cb.answer()
     async with dbmod.SessionLocal() as db:
         user = await svc.set_user_lang(db, cb.from_user.id, lang)
     await cb.answer("✅")
+    # Новый пользователь ещё не представился → сразу продолжаем регистрацию
+    # (просим ФИО) уже на выбранном языке.
+    if not user.full_name:
+        await state.set_state(Reg.name)
+        await state.update_data(first_time=True)
+        try:
+            await cb.message.edit_text(L("lang_set", lang))  # убираем кнопки, подтверждаем язык
+        except Exception:
+            pass
+        await cb.message.answer(L("welcome_name", lang))
+        return
+    # Уже зарегистрирован — просто переключил язык: пересобираем нижние кнопки.
     try:
         await cb.message.edit_text(L("lang_set", lang))
     except Exception:
         pass
-    # Пересобираем нижние кнопки на новом языке.
     await cb.message.answer(L("menu_hint_student", lang) if not (
         user.is_teacher or user.id in settings.admin_ids
     ) else L("menu_hint_teacher", lang), reply_markup=main_reply_kb(user))

@@ -86,6 +86,12 @@ _T = {
         "uz": "🌐 Interfeys tilini tanlang:",
         "en": "🌐 Choose the interface language:",
     },
+    # Первый экран для нового пользователя — одинаков на всех языках, он ещё не выбрал.
+    "choose_language_first": {
+        "ru": "🌐 Tilni tanlang / Выберите язык / Choose your language:",
+        "uz": "🌐 Tilni tanlang / Выберите язык / Choose your language:",
+        "en": "🌐 Tilni tanlang / Выберите язык / Choose your language:",
+    },
     "lang_set": {
         "ru": "✅ Язык переключён на русский.",
         "uz": "✅ Til o'zbekchaga o'zgartirildi.",
