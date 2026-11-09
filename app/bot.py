@@ -45,6 +45,7 @@ from .ai import generate_slides, generate_test_questions
 from .present import PRESENT_EXAMPLE, build_presentation, build_pptx, build_test_docx
 from .universities import UNIVERSITIES
 from . import limits
+from .bottexts import BTN_ALL, btn, t as L
 
 log = logging.getLogger("bot")
 router = Router()
@@ -152,9 +153,10 @@ def lang_kb(prefix: str) -> InlineKeyboardMarkup:
 def main_reply_kb(user: User) -> ReplyKeyboardMarkup:
     """Закреплённые кнопки снизу. Презентации и тесты доступны всем; студентам
     добавляем баланс и пополнение (они платят за генерацию, преподаватели — бесплатно)."""
-    rows = [[KeyboardButton(text=BTN_PRES), KeyboardButton(text=BTN_TEST)]]
+    lang = getattr(user, "lang", None) or "ru"
+    rows = [[KeyboardButton(text=btn("pres", lang)), KeyboardButton(text=btn("test", lang))]]
     if not user.is_teacher and user.id not in settings.admin_ids:
-        rows.append([KeyboardButton(text=BTN_BALANCE), KeyboardButton(text=BTN_TOPUP)])
+        rows.append([KeyboardButton(text=btn("balance", lang)), KeyboardButton(text=btn("topup", lang))])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True)
 
 
@@ -309,13 +311,11 @@ def menu_text(user: User) -> str:
 
 async def send_menu(message: Message, user: User):
     await message.answer(menu_text(user) + CREDIT, reply_markup=menu_keyboard(user))
+    lang = getattr(user, "lang", None) or "ru"
     if user.is_teacher or user.id in settings.admin_ids:
-        hint = "⬇️ Снизу закреплены кнопки: «📝 Создать тест» и «🖥 Создать презентацию»."
+        hint = L("menu_hint_teacher", lang)
     else:
-        hint = (
-            "⬇️ Снизу закреплены кнопки: «📝 Создать тест», «🖥 Создать презентацию», "
-            "«💰 Мой баланс» и «💳 Пополнить баланс»."
-        )
+        hint = L("menu_hint_student", lang)
     await message.answer(hint, reply_markup=main_reply_kb(user))
 
 
@@ -325,37 +325,74 @@ async def send_menu(message: Message, user: User):
 async def start(message: Message, state: FSMContext):
     await state.clear()
     async with dbmod.SessionLocal() as db:
-        user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
+        user = await svc.get_or_create_user(
+            db, message.from_user.id, message.from_user.username,
+            lang_code=message.from_user.language_code,
+        )
+    lang = getattr(user, "lang", None) or "ru"
     if user.blocked:
-        return await message.answer("Доступ заблокирован.")
+        return await message.answer(L("blocked", lang))
     if not user.full_name:
         await state.set_state(Reg.name)
         await state.update_data(first_time=True)
-        return await message.answer(
-            "Добро пожаловать! 👋\n\nНапишите ваши <b>Фамилию и Имя</b> полностью.\n"
-            "Их увидит преподаватель в результатах тестов.\n\n<i>Например: Каримов Азиз</i>"
-        )
+        return await message.answer(L("welcome_name", lang))
     await send_menu(message, user)
+
+
+# ---------------------------------------------------------------- выбор языка интерфейса
+def language_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🇺🇿 O'zbek", callback_data="setlang:uz"),
+        InlineKeyboardButton(text="🇷🇺 Русский", callback_data="setlang:ru"),
+        InlineKeyboardButton(text="🇬🇧 English", callback_data="setlang:en"),
+    ]])
+
+
+@router.message(Command("language", "til", "lang"))
+async def change_language(message: Message):
+    async with dbmod.SessionLocal() as db:
+        user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
+    lang = getattr(user, "lang", None) or "ru"
+    await message.answer(L("choose_language", lang), reply_markup=language_kb())
+
+
+@router.callback_query(F.data.startswith("setlang:"))
+async def set_language(cb: CallbackQuery):
+    lang = cb.data.split(":", 1)[1]
+    if lang not in ("uz", "ru", "en"):
+        return await cb.answer()
+    async with dbmod.SessionLocal() as db:
+        user = await svc.set_user_lang(db, cb.from_user.id, lang)
+    await cb.answer("✅")
+    try:
+        await cb.message.edit_text(L("lang_set", lang))
+    except Exception:
+        pass
+    # Пересобираем нижние кнопки на новом языке.
+    await cb.message.answer(L("menu_hint_student", lang) if not (
+        user.is_teacher or user.id in settings.admin_ids
+    ) else L("menu_hint_teacher", lang), reply_markup=main_reply_kb(user))
 
 
 # ---------------------------------------------------------------- ИИ: тест/презентация по теме
 async def _ai_gate(message: Message, state: FSMContext) -> bool:
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
+    lang = getattr(user, "lang", None) or "ru"
     if user.blocked:
-        await message.answer("Доступ заблокирован.")
+        await message.answer(L("blocked", lang))
         return False
     if not user.full_name:
-        await message.answer("Сначала напишите ваши Фамилию и Имя: /start")
+        await message.answer(L("need_name", lang))
         return False
     if not settings.anthropic_api_key:
         await state.clear()
-        await message.answer("🤖 ИИ пока не подключён. Обратитесь к администратору.")
+        await message.answer(L("ai_off", lang))
         return False
     return True
 
 
-@router.message(F.text == BTN_TEST)
+@router.message(F.text.in_(BTN_ALL["test"]))
 async def make_test_start(message: Message, state: FSMContext):
     if not await _ai_gate(message, state):
         return
@@ -587,7 +624,7 @@ def _rag_note(ctx: dict, lang: str = "ru") -> str:
     return "\n" + base
 
 
-@router.message(F.text == BTN_PRES)
+@router.message(F.text.in_(BTN_ALL["pres"]))
 async def make_pres_start(message: Message, state: FSMContext):
     if not await _ai_gate(message, state):
         return
@@ -704,7 +741,7 @@ async def _refund(from_user, amount: int):
         await svc.refund(db, u, amount)
 
 
-@router.message(F.text == BTN_BALANCE)
+@router.message(F.text.in_(BTN_ALL["balance"]))
 @router.message(Command("balance"))
 async def balance_cmd(message: Message):
     async with dbmod.SessionLocal() as db:
@@ -738,7 +775,7 @@ async def _topup_amounts_kb(user_id: int, username: str | None):
     return InlineKeyboardMarkup(inline_keyboard=rows), None
 
 
-@router.message(F.text == BTN_TOPUP)
+@router.message(F.text.in_(BTN_ALL["topup"]))
 async def topup_start(message: Message):
     kb, err = await _topup_amounts_kb(message.from_user.id, message.from_user.username)
     if err:
@@ -1671,6 +1708,7 @@ async def setup_bot(bot: Bot):
             BotCommand(command="template", description="Шаблоны файлов для тестов"),
             BotCommand(command="present", description="Сделать презентацию"),
             BotCommand(command="balance", description="Баланс и пополнение"),
+            BotCommand(command="language", description="🌐 Til / Язык / Language"),
             BotCommand(command="help", description="Помощь"),
         ]
     )

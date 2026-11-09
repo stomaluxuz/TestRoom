@@ -45,11 +45,14 @@ class ServiceError(Exception):
 
 # ---------------------------------------------------------------- пользователи
 
-async def get_or_create_user(db: AsyncSession, user_id: int, username: str | None = None) -> User:
+async def get_or_create_user(
+    db: AsyncSession, user_id: int, username: str | None = None, lang_code: str | None = None
+) -> User:
     user = await db.get(User, user_id)
     if user is None:
         bonus = await _welcome_bonus(db)  # приветственный бонус новому пользователю
-        user = User(id=user_id, username=username, balance=bonus)
+        from .bottexts import detect_lang
+        user = User(id=user_id, username=username, balance=bonus, lang=detect_lang(lang_code))
         db.add(user)
         try:
             await db.commit()
@@ -141,6 +144,17 @@ async def decide_teacher(db: AsyncSession, user_id: int, approve: bool) -> User:
     if approve:
         user.role = "teacher"
     user.teacher_pending = False  # отклонение просто снимает заявку, роль остаётся student
+    await db.commit()
+    return user
+
+
+async def set_user_lang(db: AsyncSession, user_id: int, lang: str) -> User:
+    """Сменить язык интерфейса бота у пользователя (uz/ru/en)."""
+    lang = lang if lang in ("uz", "ru", "en") else "ru"
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ServiceError("Пользователь не найден.", 404)
+    user.lang = lang
     await db.commit()
     return user
 

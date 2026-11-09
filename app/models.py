@@ -47,6 +47,7 @@ class User(Base):
     pres_total: Mapped[int] = mapped_column(Integer, default=0)  # всего презентаций (не обнуляется)
     # Баланс в сумах. Студенты платят за генерацию презентаций и тестов; преподаватели — бесплатно.
     balance: Mapped[int] = mapped_column(Integer, default=0)
+    lang: Mapped[str] = mapped_column(String(2), default="ru")  # язык интерфейса бота (uz/ru/en)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     @property
