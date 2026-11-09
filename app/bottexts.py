@@ -235,6 +235,17 @@ _T = {
         "uz": "Nechta savol tuzay? Son yozing (masalan 10, ko'pi bilan 40).",
         "en": "How many questions? Type a number (e.g. 10, max 40).",
     },
+    "t_difficulty_q": {
+        "ru": "Какая <b>сложность</b> теста?\n\n🟢 Лёгкий — базовые факты\n"
+              "🟡 Средний — понимание темы\n🔴 Сложный — глубокие вопросы, похожие варианты",
+        "uz": "Test <b>qiyinligi</b> qanday bo'lsin?\n\n🟢 Oson — asosiy faktlar\n"
+              "🟡 O'rta — mavzuni tushunish\n🔴 Qiyin — chuqur savollar, o'xshash variantlar",
+        "en": "What <b>difficulty</b> for the test?\n\n🟢 Easy — basic facts\n"
+              "🟡 Medium — understanding\n🔴 Hard — deep questions, similar options",
+    },
+    "diff_easy": {"ru": "🟢 Лёгкий", "uz": "🟢 Oson", "en": "🟢 Easy"},
+    "diff_medium": {"ru": "🟡 Средний", "uz": "🟡 O'rta", "en": "🟡 Medium"},
+    "diff_hard": {"ru": "🔴 Сложный", "uz": "🔴 Qiyin", "en": "🔴 Hard"},
     "t_src_material": {
         "ru": " по вашему материалу",
         "uz": " sizning materialingiz asosida",

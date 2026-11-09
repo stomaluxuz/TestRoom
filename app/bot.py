@@ -110,6 +110,7 @@ class Present(StatesGroup):
 class MakeTest(StatesGroup):
     topic = State()
     lang = State()  # выбор языка
+    difficulty = State()  # выбор сложности: лёгкий/средний/сложный
     count = State()
     subject = State()  # выбор предмета из списка
     subject_new = State()  # ввод названия нового предмета
@@ -453,10 +454,27 @@ async def make_test_material_file(message: Message, state: FSMContext, bot: Bot)
 
 
 @router.callback_query(MakeTest.lang, F.data.regexp(r"^tlang:(ru|uz|en)$"))
+def difficulty_kb(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=L("diff_easy", lang), callback_data="tdiff:easy"),
+        InlineKeyboardButton(text=L("diff_medium", lang), callback_data="tdiff:medium"),
+        InlineKeyboardButton(text=L("diff_hard", lang), callback_data="tdiff:hard"),
+    ]])
+
+
 async def make_test_lang(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     ui = data.get("ui_lang", "ru")
     await state.update_data(lang=cb.data.split(":")[1])
+    await state.set_state(MakeTest.difficulty)
+    await _say(cb.message, L("t_difficulty_q", ui), reply_markup=difficulty_kb(ui))
+    await cb.answer()
+
+
+@router.callback_query(MakeTest.difficulty, F.data.regexp(r"^tdiff:(easy|medium|hard)$"))
+async def make_test_difficulty(cb: CallbackQuery, state: FSMContext):
+    ui = (await state.get_data()).get("ui_lang", "ru")
+    await state.update_data(difficulty=cb.data.split(":")[1])
     await state.set_state(MakeTest.count)
     await _say(cb.message, L("t_count_q", ui))
     await cb.answer()
@@ -474,6 +492,7 @@ async def make_test_count(message: Message, state: FSMContext):
     topic, lang = data.get("topic", ""), data.get("lang", "ru")
     material = data.get("material", "")
     strict = bool(data.get("strict"))
+    difficulty = data.get("difficulty", "medium")
     # Списываем стоимость заранее (для студентов). Преподаватели — бесплатно (charged=0).
     async with dbmod.SessionLocal() as db:
         user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
@@ -494,13 +513,15 @@ async def make_test_count(message: Message, state: FSMContext):
                 # Материал прислал пользователь — RAG по библиотеке не нужен, берём строго его.
                 async with limits.timing("text"):
                     questions = await generate_test_questions(
-                        topic, n, lang=lang, context=material, strict=True
+                        topic, n, lang=lang, context=material, strict=True, difficulty=difficulty
                     )
             else:
                 async with dbmod.SessionLocal() as db, limits.timing("rag"):
                     ctx = await svc.library_context(db, topic)
                 async with limits.timing("text"):
-                    questions = await generate_test_questions(topic, n, lang=lang, context=ctx["context"])
+                    questions = await generate_test_questions(
+                        topic, n, lang=lang, context=ctx["context"], difficulty=difficulty
+                    )
     except svc.ServiceError as e:
         await _refund(message.from_user, charged)
         await state.clear()
