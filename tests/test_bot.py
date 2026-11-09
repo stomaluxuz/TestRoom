@@ -91,6 +91,29 @@ async def get_user(uid) -> User:
         return await db.get(User, uid)
 
 
+async def test_make_test_flow_to_difficulty(bot_dp):
+    """Регресс: тема → язык → СЛОЖНОСТЬ → количество. Ловит отвалившийся хендлер языка."""
+    from app.bottexts import btn
+    from app.config import settings
+
+    settings.anthropic_api_key = "x"  # чтобы _ai_gate пропустил
+    bot, dp, s = bot_dp
+    T = 7777
+    await dp.feed_update(bot, msg(T, "/start"))
+    await dp.feed_update(bot, cb(T, "setlang:ru"))
+    await dp.feed_update(bot, msg(T, "Иванов Иван"))
+    await dp.feed_update(bot, cb(T, "role:student"))
+
+    await dp.feed_update(bot, msg(T, btn("test", "ru")))  # «📝 Создать тест»
+    assert "тему теста" in s.texts(T)[-1].lower()
+    await dp.feed_update(bot, msg(T, "Кариес"))  # тема
+    assert "язык" in s.texts(T)[-1].lower()
+    await dp.feed_update(bot, cb(T, "tlang:ru"))  # ← раньше тут зависало
+    assert "Сложный" in s.texts(T)[-1]  # показан выбор сложности
+    await dp.feed_update(bot, cb(T, "tdiff:hard"))
+    assert "Сколько вопросов" in s.texts(T)[-1]  # дошли до количества
+
+
 async def test_registration_role_and_upload(bot_dp):
     bot, dp, s = bot_dp
     T = 555
