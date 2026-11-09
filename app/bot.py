@@ -453,7 +453,6 @@ async def make_test_material_file(message: Message, state: FSMContext, bot: Bot)
     await _say(message, L("t_material_accepted", ui).format(n=len(text)), reply_markup=lang_kb("tlang"))
 
 
-@router.callback_query(MakeTest.lang, F.data.regexp(r"^tlang:(ru|uz|en)$"))
 def difficulty_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=L("diff_easy", lang), callback_data="tdiff:easy"),
@@ -462,6 +461,7 @@ def difficulty_kb(lang: str) -> InlineKeyboardMarkup:
     ]])
 
 
+@router.callback_query(MakeTest.lang, F.data.regexp(r"^tlang:(ru|uz|en)$"))
 async def make_test_lang(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     ui = data.get("ui_lang", "ru")
