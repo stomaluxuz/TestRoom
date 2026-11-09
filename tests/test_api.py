@@ -48,6 +48,18 @@ async def test_unauthorized(client):
     assert r.status_code == 401
 
 
+async def test_lang_sync(client):
+    """Язык из Mini App сохраняется в БД — общий с ботом."""
+    H = headers(900)
+    assert (await client.get("/api/me", headers=H)).json()["lang"] == "ru"  # по умолчанию
+    r = await client.post("/api/me/lang", headers=H, json={"lang": "uz"})
+    assert r.status_code == 200 and r.json()["lang"] == "uz"
+    assert (await client.get("/api/me", headers=H)).json()["lang"] == "uz"  # сохранилось
+    # некорректное значение → откат к ru
+    r = await client.post("/api/me/lang", headers=H, json={"lang": "xx"})
+    assert r.json()["lang"] == "ru"
+
+
 async def test_static_and_health(client):
     assert (await client.get("/health")).json() == {"ok": True}
     r = await client.get("/")

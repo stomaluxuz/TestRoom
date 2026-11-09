@@ -338,6 +338,8 @@ function setLang(l) {
   if (l === LANG || !T[l]) return;
   LANG = l;
   try { localStorage.setItem("lang", l); } catch (e) {}
+  // Сохраняем язык в БД — чтобы бот и приложение были на одном языке (fire-and-forget).
+  if (ME) { ME.lang = l; api("/api/me/lang", { json: { lang: l } }).catch(() => {}); }
   const top = navStack[navStack.length - 1];
   if (top) top.screen(top.params); else if (ME) home();
 }
@@ -414,6 +416,11 @@ async function boot() {
     if (ACT_AS) { setActAs(null); return boot(); }
     render(`<div class="center"><p>${esc(e.message)}</p><button class="btn" onclick="location.reload()">${t("retry")}</button></div>`);
     return;
+  }
+  // Единый язык с ботом: берём сохранённый язык пользователя из БД.
+  if (ME && ["ru", "uz", "en"].includes(ME.lang)) {
+    LANG = ME.lang;
+    try { localStorage.setItem("lang", ME.lang); } catch (e) {}
   }
   updateActBar();
   if (!ME.full_name) go(nameScreen); else home();

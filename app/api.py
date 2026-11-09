@@ -141,6 +141,10 @@ class RoleIn(BaseModel):
     role: str
 
 
+class LangIn(BaseModel):
+    lang: str
+
+
 class TeacherRequestIn(BaseModel):
     info: str = ""
     kafedra: str = ""
@@ -291,6 +295,7 @@ def create_app() -> FastAPI:
             "pro_until": user.pro_until.isoformat() if user.is_pro else None,
             "is_pro_plus": user.is_pro_plus,
             "proplus_until": user.proplus_until.isoformat() if user.is_pro_plus else None,
+            "lang": getattr(user, "lang", None) or "ru",
         }
         cfg = await svc.get_settings(db)
         data["balance"] = user.balance or 0
@@ -312,6 +317,13 @@ def create_app() -> FastAPI:
     async def set_role(body: RoleIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         await svc.set_role(db, user, body.role)
         return {"role": user.role, "is_teacher": user.is_teacher}
+
+    @app.post("/api/me/lang")
+    async def set_lang(body: LangIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Единый язык бота и приложения: переключатель в Mini App сохраняет его в БД."""
+        lang = body.lang if body.lang in ("uz", "ru", "en") else "ru"
+        await svc.set_user_lang(db, user.id, lang)
+        return {"lang": lang}
 
     @app.post("/api/me/workplace")
     async def set_workplace(
