@@ -1676,7 +1676,7 @@ async def setup_bot(bot: Bot):
     )
     if settings.webapp_url.startswith("https://"):
         await bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="Тесты", web_app=WebAppInfo(url=settings.webapp_url))
+            menu_button=MenuButtonWebApp(text="Приложение", web_app=WebAppInfo(url=settings.webapp_url))
         )
     else:
         log.warning("WEBAPP_URL не задан или не https — кнопка приложения не появится.")
