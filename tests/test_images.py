@@ -111,7 +111,8 @@ async def test_illustrate_slides_dedup_across_slides(monkeypatch):
     assert "images" not in slides[1]  # дубль между слайдами убран
 
 
-async def test_illustrate_slides_fallback_on_vision_error(monkeypatch):
+async def test_illustrate_slides_no_photo_on_vision_error(monkeypatch):
+    """Зрение недоступно → слайд остаётся БЕЗ фото (лучше, чем картинка «не в тему»)."""
     async def fake_gather(query, domain, client, limit=6, hint=None, source_funcs=None):
         return [{"url": "u1", "source": "s", "data": b"X", "vb64": "WA=="}]
 
@@ -122,4 +123,4 @@ async def test_illustrate_slides_fallback_on_vision_error(monkeypatch):
     monkeypatch.setattr(ai, "choose_slide_images", fake_choose)
     slides = [{"title": "T", "bullets": ["b"], "img": "q"}]
     await images.illustrate_slides(slides, "medical", client=None, max_per_slide=1)
-    assert slides[0]["images"] == [b"X"]  # зрение недоступно — берём первый кандидат
+    assert "images" not in slides[0]  # картинку вслепую не ставим

@@ -118,11 +118,17 @@ def _eyebrow(tf, text, accent):
 
 
 def _bullets(slide, l, t, w, h, items, accent):
-    tf = _tb(slide, l, t, w, h); tf.auto_size = MSO_AUTO_SIZE.NONE
-    size = 18 if len(items) <= 4 else (16 if len(items) <= 5 else 14)
+    items = [b for b in items if b][:7] or [" "]  # не больше 7 пунктов — иначе слайд перегружен
+    tf = _tb(slide, l, t, w, h)
+    # «Ужимать текст при переполнении»: PowerPoint/Google Slides сами уменьшат шрифт, чтобы
+    # список НИКОГДА не вылезал за блок (на подвал/фото). Это убирает наложение текста.
+    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    n = len(items)
+    size = 18 if n <= 4 else (16 if n <= 5 else 14)
+    space = Pt(16) if n <= 4 else (Pt(12) if n <= 6 else Pt(9))
     for i, b in enumerate(items):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_after = Pt(16); p.line_spacing = 1.12
+        p.space_after = space; p.line_spacing = 1.1
         r1 = p.add_run(); r1.text = "—  "; _font(r1, HEAD, size, accent, bold=True)
         r2 = p.add_run(); r2.text = b; _font(r2, SANS, size, BODY)
 
@@ -165,6 +171,7 @@ def assemble_themed(title: str, subtitle: str, slides: list[dict],
     w1 = wm.paragraphs[0].add_run(); w1.text = "Test"; _font(w1, HEAD, 18, INK, bold=True)
     w2 = wm.paragraphs[0].add_run(); w2.text = "Room"; _font(w2, HEAD, 18, accent, bold=True)
     tf = _tb(s0, 0.9, 2.4, PW - 2.4, 2.1)
+    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE  # очень длинная тема ужмётся, не вылезет
     tf.paragraphs[0].line_spacing = 1.04
     r = tf.paragraphs[0].add_run(); r.text = title
     _font(r, HEAD, 40 if len(title) <= 46 else (32 if len(title) <= 90 else 26), INK, bold=True)
@@ -186,7 +193,10 @@ def assemble_themed(title: str, subtitle: str, slides: list[dict],
         imgs = [b for b in (sl.get("images") or []) if b] or ([sl["img_bytes"]] if sl.get("img_bytes") else [])
         body_w = 6.9 if imgs else 10.5
         htf = _tb(s, 0.7, 0.62, body_w, 1.0, MSO_ANCHOR.MIDDLE)
-        hr = htf.paragraphs[0].add_run(); hr.text = sl.get("title") or " "; _font(hr, HEAD, 28, INK, bold=True)
+        htf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE  # длинный заголовок ужмётся, не наедет на список
+        title_txt = sl.get("title") or " "
+        hsize = 28 if len(title_txt) <= 52 else (23 if len(title_txt) <= 82 else 19)
+        hr = htf.paragraphs[0].add_run(); hr.text = title_txt; _font(hr, HEAD, hsize, INK, bold=True)
         _rect(s, 0.72, 1.68, 1.1, 0.07, accent, MSO_SHAPE.ROUNDED_RECTANGLE, round_adj=0.5)
         bl = [b for b in (sl.get("bullets") or []) if b.strip()] or [" "]
         _bullets(s, 0.7, 2.05, body_w, 4.55, bl, accent)

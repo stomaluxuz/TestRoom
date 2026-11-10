@@ -335,7 +335,7 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
                 )
                 picked = [idx_map[i] for i in chosen if 0 <= i < len(idx_map)]
             except Exception:
-                picked = idx_map[:2]  # зрение недоступно — первые кандидаты как запас
+                picked = []  # зрение недоступно — лучше слайд без фото, чем картинка «не в тему»
             # picked ПУСТОЙ = зрение забраковало всё (не по теме) → слайд без фото (не «собака»).
             sl["_approved"] = [(cands[i]["data"], cands[i].get("ah")) for i in picked]
 
