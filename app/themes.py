@@ -133,19 +133,34 @@ def _bullets(slide, l, t, w, h, items, accent):
         r2 = p.add_run(); r2.text = b; _font(r2, SANS, size, BODY)
 
 
-def _photo_card(slide, l, t, w, h, img_bytes):
+def _prep_image(img_bytes, max_px=1400):
+    """Проверяет и перекодирует картинку в чистый JPEG, который python-pptx надёжно встроит.
+    Возвращает (bytes, aspect) или None, если картинка битая/неподдерживаемая — тогда слайд
+    останется БЕЗ фото (а не с пустой белой рамкой)."""
+    try:
+        from PIL import Image as _PILImage
+        im = _PILImage.open(io.BytesIO(img_bytes))
+        im.load()
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        if max(im.size) > max_px:  # не тащим гигантские картинки в файл
+            im.thumbnail((max_px, max_px))
+        iw, ih = im.size
+        if iw < 8 or ih < 8:
+            return None
+        buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+        return buf.getvalue(), (iw / ih)
+    except Exception:
+        return None
+
+
+def _photo_card(slide, l, t, w, h, img_bytes, ar):
     """Белая карточка ОБЛЕГАЕТ фото: одинаковый тонкий кант со всех сторон, по центру
     отведённой области (l,t,w,h). Так рамка выглядит ровно на всех слайдах независимо от
     соотношения сторон картинки (раньше карточка была фиксированной → неровные белые поля)."""
     pad = 0.14
     cx, cy = l + w / 2.0, t + h / 2.0  # центр области под фото
-    try:
-        from PIL import Image as _PILImage
-        with _PILImage.open(io.BytesIO(img_bytes)) as im:
-            iw, ih = im.size
-        ar = (iw / ih) if ih else 4 / 3
-    except Exception:
-        ar = 4 / 3
+    ar = ar if ar and ar > 0 else 4 / 3
     maxw, maxh = w - 2 * pad, h - 2 * pad
     dw = maxw; dh = dw / ar
     if dh > maxh:
@@ -158,7 +173,11 @@ def _photo_card(slide, l, t, w, h, img_bytes):
         slide.shapes.add_picture(io.BytesIO(img_bytes), Inches(cl + pad), Inches(ct + pad),
                                  width=Inches(dw), height=Inches(dh))
     except Exception:
-        pass
+        # фото всё же не встроилось → убираем пустую белую рамку (её быть не должно)
+        try:
+            card._element.getparent().remove(card._element)
+        except Exception:
+            pass
 
 
 # ------------------------------------------------------------------ сборка
@@ -201,7 +220,10 @@ def assemble_themed(title: str, subtitle: str, slides: list[dict],
     for sl in slides:
         s = prs.slides.add_slide(blank); _bg(s)
         _rect(s, 0, 0, 0.14, PH, accent)  # боковая акцентная полоса
-        imgs = [b for b in (sl.get("images") or []) if b] or ([sl["img_bytes"]] if sl.get("img_bytes") else [])
+        imgs_raw = [b for b in (sl.get("images") or []) if b] or ([sl["img_bytes"]] if sl.get("img_bytes") else [])
+        # Проверяем и перекодируем каждую картинку. Битые/неподдерживаемые отбрасываем —
+        # тогда слайд станет текстовым на всю ширину, а НЕ с пустой белой рамкой.
+        imgs = [v for v in (_prep_image(b) for b in imgs_raw) if v]  # [(bytes, aspect), ...]
         body_w = 6.9 if imgs else 10.5
         htf = _tb(s, 0.7, 0.62, body_w, 1.0, MSO_ANCHOR.MIDDLE)
         htf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE  # длинный заголовок ужмётся, не наедет на список
@@ -212,7 +234,7 @@ def assemble_themed(title: str, subtitle: str, slides: list[dict],
         bl = [b for b in (sl.get("bullets") or []) if b.strip()] or [" "]
         _bullets(s, 0.7, 2.05, body_w, 4.55, bl, accent)
         if imgs:
-            _photo_card(s, 8.0, 1.9, 4.6, 4.2, imgs[0])
+            _photo_card(s, 8.0, 1.9, 4.6, 4.2, imgs[0][0], imgs[0][1])
         _rect(s, 0.7, PH - 0.62, PW - 1.4, 0.012, HAIR)
         ft = _tb(s, 0.7, PH - 0.55, PW - 1.4, 0.4).paragraphs[0].add_run()
         ft.text = "TestRoom"; _font(ft, SANS, 9, MUTED)

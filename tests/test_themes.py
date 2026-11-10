@@ -1,11 +1,12 @@
 import io
 
+from PIL import Image
+
 from app.themes import THEMES, assemble_themed, detect_theme
 
-PNG_1x1 = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00"
-    b"\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+
+def _img(w=400, h=300, color=(90, 140, 180)) -> bytes:
+    b = io.BytesIO(); Image.new("RGB", (w, h), color).save(b, "JPEG"); return b.getvalue()
 
 
 def test_detect_theme_by_topic():
@@ -29,12 +30,30 @@ def test_assemble_themed_builds_pptx():
 
 
 def test_assemble_themed_with_image_has_picture():
-    slides = [{"title": "С фото", "bullets": ["пункт"], "images": [PNG_1x1]}]
+    slides = [{"title": "С фото", "bullets": ["пункт"], "images": [_img()]}]
     _, data = assemble_themed("Хирургия челюсти", "", slides)
     from pptx import Presentation
     prs = Presentation(io.BytesIO(data))
     pics = [sh for sh in prs.slides[1].shapes if sh.shape_type == 13]
     assert len(pics) == 1  # фото вставлено в карточку
+
+
+def test_assemble_themed_bad_image_no_empty_card():
+    """Битая картинка → слайд БЕЗ фото и БЕЗ пустой белой рамки (не пустая карточка)."""
+    from pptx.util import Emu
+
+    slides = [{"title": "Битое фото", "bullets": ["текст"], "images": [b"garbage-not-image"]}]
+    _, data = assemble_themed("Хирургия", "", slides)
+    from pptx import Presentation
+    prs = Presentation(io.BytesIO(data))
+    s = prs.slides[1]
+    pics = [sh for sh in s.shapes if sh.shape_type == 13]
+    assert len(pics) == 0  # фото нет
+    # нет белой карточки-рамки в правой части (AUTO_SHAPE правее 7 дюймов)
+    cards = [sh for sh in s.shapes
+             if sh.shape_type == 1 and sh.left and sh.left > Emu(int(7 * 914400)) and sh.width
+             and sh.width > Emu(int(2 * 914400))]
+    assert len(cards) == 0  # пустой рамки быть не должно
 
 
 def test_theme_override_ignores_detection():
