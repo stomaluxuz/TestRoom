@@ -134,18 +134,29 @@ def _bullets(slide, l, t, w, h, items, accent):
 
 
 def _photo_card(slide, l, t, w, h, img_bytes):
-    card = _rect(slide, l, t, w, h, WHITE, MSO_SHAPE.ROUNDED_RECTANGLE, round_adj=0.055)
-    _soft_shadow(card)
-    pad = 0.18
+    """Белая карточка ОБЛЕГАЕТ фото: одинаковый тонкий кант со всех сторон, по центру
+    отведённой области (l,t,w,h). Так рамка выглядит ровно на всех слайдах независимо от
+    соотношения сторон картинки (раньше карточка была фиксированной → неровные белые поля)."""
+    pad = 0.14
+    cx, cy = l + w / 2.0, t + h / 2.0  # центр области под фото
     try:
-        pic = slide.shapes.add_picture(io.BytesIO(img_bytes), Inches(l + pad), Inches(t + pad),
-                                       width=Inches(w - 2 * pad))
-        maxh = Inches(h - 2 * pad)
-        if pic.height > maxh:
-            sc = maxh / pic.height
-            pic.width = int(pic.width * sc); pic.height = int(maxh)
-        pic.left = int(Inches(l) + (Inches(w) - pic.width) / 2)
-        pic.top = int(Inches(t) + (Inches(h) - pic.height) / 2)
+        from PIL import Image as _PILImage
+        with _PILImage.open(io.BytesIO(img_bytes)) as im:
+            iw, ih = im.size
+        ar = (iw / ih) if ih else 4 / 3
+    except Exception:
+        ar = 4 / 3
+    maxw, maxh = w - 2 * pad, h - 2 * pad
+    dw = maxw; dh = dw / ar
+    if dh > maxh:
+        dh = maxh; dw = dh * ar
+    card_w, card_h = dw + 2 * pad, dh + 2 * pad
+    cl, ct = cx - card_w / 2.0, cy - card_h / 2.0
+    card = _rect(slide, cl, ct, card_w, card_h, WHITE, MSO_SHAPE.ROUNDED_RECTANGLE, round_adj=0.055)
+    _soft_shadow(card)
+    try:
+        slide.shapes.add_picture(io.BytesIO(img_bytes), Inches(cl + pad), Inches(ct + pad),
+                                 width=Inches(dw), height=Inches(dh))
     except Exception:
         pass
 
