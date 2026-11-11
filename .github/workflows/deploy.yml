@@ -41,6 +41,10 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@212.47.58.69 'bash -s' <<'EOF'
           set -e
           tar -xzf /root/upd.tar.gz -C /opt/testroom
+          # OCR сканов: системный tesseract + языки (ставим один раз, если ещё нет; сбой не ломает деплой)
+          if ! command -v tesseract >/dev/null 2>&1; then
+            (apt-get update -qq && apt-get install -y -qq tesseract-ocr tesseract-ocr-rus tesseract-ocr-uzb tesseract-ocr-uzb-cyrl tesseract-ocr-eng) || echo "tesseract install failed (OCR останется выключенным)"
+          fi
           /opt/testroom/.venv/bin/pip install -q -r /opt/testroom/requirements.txt
           systemctl restart testroom
           rm -f /root/upd.tar.gz

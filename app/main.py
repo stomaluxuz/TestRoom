@@ -141,6 +141,16 @@ async def run():
             await figjobs.enqueue_pending()  # возобновить задания, прерванные рестартом
         tasks.append(asyncio.create_task(figjobs.night_loop(), name="figures-night"))
         log.info("Иллюстрации из книг: включены, режим=%s", settings.library_figures_mode)
+    if settings.ocr_enabled:
+        from . import ocr as ocrmod
+        from . import ocrjobs
+
+        if ocrmod.tesseract_available():
+            ocrjobs.start()  # фоновый воркер распознавания сканов (OCR)
+            n = await ocrjobs.enqueue_pending()  # возобновить прерванные рестартом
+            log.info("OCR сканов: включён (tesseract найден); в очереди книг=%s", n)
+        else:
+            log.warning("OCR сканов: включён в настройках, но tesseract не найден — сканы не распознаются.")
     log.info("Сервер Mini App: http://%s:%s", settings.host, settings.port)
 
     stop = asyncio.Event()

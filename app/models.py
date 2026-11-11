@@ -243,6 +243,8 @@ class LibraryDoc(Base):
     # Статус извлечения иллюстраций из PDF (фича LIBRARY_FIGURES): None — не требуется/не трогали,
     # pending — ждёт обработки (фон или ночь), done — обработано, error — обработка упала.
     figures_status: Mapped[str | None] = mapped_column(String(16), index=True)
+    # OCR сканов: None — не скан / не требует; pending — ждёт распознавания; done/error — итог.
+    ocr_status: Mapped[str | None] = mapped_column(String(16), index=True)
 
 
 class LibraryChunk(Base):

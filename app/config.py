@@ -97,6 +97,18 @@ class Settings:
     # на бесплатном (без карты) выставьте EMBED_MAX_TOKENS_PER_REQ=3000 в .env.
     embed_max_tokens_per_req: int = field(default_factory=lambda: int(os.getenv("EMBED_MAX_TOKENS_PER_REQ", "100000")))
 
+    # OCR сканов: сканированные PDF (картинки без текстового слоя) распознаём в фоне, чтобы они
+    # тоже попадали в поиск по библиотеке (RAG). Нужен системный tesseract-ocr + языковые пакеты
+    # (rus/uzb/uzb_cyrl/eng) на сервере; если его нет — фича тихо выключается (скан просто не
+    # индексируется, как раньше). Распознаём ТОЛЬКО одобренные книги, по одной за раз, в фоне.
+    ocr_enabled: bool = field(default_factory=lambda: os.getenv("OCR_ENABLED", "1") == "1")
+    ocr_langs: str = field(default_factory=lambda: os.getenv("OCR_LANGS", "rus+uzb+eng"))
+    ocr_dpi: int = field(default_factory=lambda: int(os.getenv("OCR_DPI", "200")))
+    ocr_max_pages: int = field(default_factory=lambda: int(os.getenv("OCR_MAX_PAGES", "500")))
+    # Порог «это скан»: если из PDF извлеклось меньше этого числа символов на страницу —
+    # считаем страницы сканом и ставим книгу в очередь на OCR.
+    ocr_min_chars_per_page: int = field(default_factory=lambda: int(os.getenv("OCR_MIN_CHARS_PER_PAGE", "80")))
+
     # Лимиты бесплатного тарифа
     # Сколько запусков теста (для группы) в день на бесплатном тарифе. 0 — без ограничения.
     free_max_sessions_per_day: int = field(default_factory=lambda: int(os.getenv("FREE_MAX_SESSIONS_PER_DAY", "1")))

@@ -1884,10 +1884,20 @@ async def add_library_doc_from_path(
             text = (raw or "")[:LIBRARY_TEXT_STORE_MAX]
         except Exception:
             text = ""
+    # Скан ли это? (PDF с малым текстовым слоем) → пометим на фоновое распознавание (OCR).
+    ocr_status = None
+    if settings.ocr_enabled and (filename or "").lower().endswith(".pdf"):
+        try:
+            from . import ocr as ocrmod
+            pages = await asyncio.to_thread(ocrmod.pdf_page_count, src_path)
+            if ocrmod.looks_scanned(text, pages):
+                ocr_status = "pending"
+        except Exception:
+            ocr_status = None
     doc = LibraryDoc(
         subject_id=subject_id, title=title[:300], filename=(filename or "file")[:300],
         content_type=content_type, size=size, path="", text=text,
-        uploaded_by=uploader_id, status="pending",
+        uploaded_by=uploader_id, status="pending", ocr_status=ocr_status,
     )
     db.add(doc)
     await db.flush()  # получить id для имени файла
@@ -2190,11 +2200,21 @@ async def decide_library_doc(db: AsyncSession, doc_id: int, approve: bool, admin
     d.approved_at = utcnow()
     await db.commit()
     if approve:
-        # индексируем для RAG (лучшая попытка: ошибка эмбеддингов не должна срывать одобрение)
-        try:
-            await index_library_doc(db, d)
-        except Exception:
-            pass
+        from . import ocr as ocrmod
+        needs_ocr = (
+            settings.ocr_enabled and d.ocr_status == "pending" and ocrmod.tesseract_available()
+        )
+        if needs_ocr:
+            # Скан: текст появится только после OCR → не индексируем сейчас (нечего), а ставим
+            # книгу в фоновую очередь на распознавание; воркер сам заиндексирует после OCR.
+            from . import ocrjobs
+            ocrjobs.enqueue(d.id)
+        else:
+            # индексируем для RAG (лучшая попытка: ошибка эмбеддингов не должна срывать одобрение)
+            try:
+                await index_library_doc(db, d)
+            except Exception:
+                pass
         # Иллюстрации из PDF режем НЕ здесь (тяжело: vision на каждую фигуру) — лишь помечаем
         # книгу к обработке, чтобы одобрение было мгновенным. Режет фоновый воркер (режим
         # background) или ночной прогон (режим night) — см. app/figjobs.py.
@@ -2454,6 +2474,78 @@ async def index_library_doc(db: AsyncSession, doc: LibraryDoc, pace: float = 0.0
     await db.commit()
     invalidate_vec_cache()  # добавились куски → кэш пересоберётся при следующем поиске
     return len(chunks)
+
+
+async def pending_ocr_doc_ids(db: AsyncSession) -> list[int]:
+    """ID одобренных книг, ждущих распознавания скана (OCR)."""
+    rows = await db.scalars(
+        select(LibraryDoc.id).where(LibraryDoc.status == "approved", LibraryDoc.ocr_status == "pending")
+    )
+    return list(rows.all())
+
+
+async def backfill_ocr(db: AsyncSession) -> int:
+    """Пометить РАНЕЕ загруженные одобренные сканы на OCR (одноразово на книгу).
+
+    Скан определяем по признакам, не открывая файл: это PDF, ocr_status ещё не выставлен,
+    а извлечённого текста почти нет (у скана текстового слоя нет). Возвращает число помеченных."""
+    if not settings.ocr_enabled:
+        return 0
+    rows = (await db.execute(
+        select(LibraryDoc.id, LibraryDoc.text, LibraryDoc.filename)
+        .where(LibraryDoc.status == "approved", LibraryDoc.ocr_status.is_(None))
+    )).all()
+    n = 0
+    for did, text, fn in rows:
+        if (fn or "").lower().endswith(".pdf") and len((text or "").strip()) < 500:
+            d = await db.get(LibraryDoc, did)
+            if d is not None:
+                d.ocr_status = "pending"
+                n += 1
+    if n:
+        await db.commit()
+    return n
+
+
+async def ocr_doc(db: AsyncSession, doc_id: int) -> int:
+    """Распознать текст скана (OCR) у одобренной книги и заиндексировать его для RAG.
+    Тяжёлый OCR уводится в поток, соединение БД на это время отпускается. Возвращает
+    число распознанных символов."""
+    import os
+
+    from . import ocr as ocrmod
+
+    if not (settings.ocr_enabled and ocrmod.tesseract_available()):
+        return 0
+    d = await db.get(LibraryDoc, doc_id)
+    if d is None or d.status != "approved":
+        return 0
+    path = d.path
+    is_pdf = (d.filename or "").lower().endswith(".pdf")
+    await db.rollback()  # отпускаем соединение на время тяжёлого OCR
+    if not (path and is_pdf and os.path.exists(path)):
+        d2 = await db.get(LibraryDoc, doc_id)
+        if d2 is not None:
+            d2.ocr_status = "error"
+            await db.commit()
+        return 0
+    try:
+        text = await asyncio.to_thread(ocrmod.ocr_pdf, path)
+    except Exception:
+        text = ""
+    d2 = await db.get(LibraryDoc, doc_id)
+    if d2 is None:
+        return 0
+    if text:
+        d2.text = text[:LIBRARY_TEXT_STORE_MAX]
+    d2.ocr_status = "done"
+    await db.commit()
+    if text:
+        try:
+            await index_library_doc(db, d2)  # заэмбеддить распознанный текст → попадёт в поиск
+        except Exception:
+            pass
+    return len(text)
 
 
 async def reindex_library(db: AsyncSession, only_missing: bool = True) -> dict:

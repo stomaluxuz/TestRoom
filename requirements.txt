@@ -15,3 +15,5 @@ pypdf==5.1.0
 # Для PostgreSQL раскомментируйте:
 # asyncpg
 pymupdf==2.1.0
+# OCR сканов (нужен ещё системный tesseract-ocr + языки rus/uzb/uzb_cyrl/eng на сервере):
+pytesseract==0.3.13
