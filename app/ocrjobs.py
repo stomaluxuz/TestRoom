@@ -101,3 +101,6 @@ async def _run_worker() -> None:
             log.exception("ocrjobs: воркер упал на doc=%s", doc_id)
         finally:
             q.task_done()
+        # пауза между книгами — не забивать процессор при массовом бэкофилле сканов
+        if settings.ocr_book_pause > 0:
+            await asyncio.sleep(settings.ocr_book_pause)

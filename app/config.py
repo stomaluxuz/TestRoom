@@ -108,6 +108,10 @@ class Settings:
     # Порог «это скан»: если из PDF извлеклось меньше этого числа символов на страницу —
     # считаем страницы сканом и ставим книгу в очередь на OCR.
     ocr_min_chars_per_page: int = field(default_factory=lambda: int(os.getenv("OCR_MIN_CHARS_PER_PAGE", "80")))
+    # Троттлинг OCR, чтобы фоновое распознавание сканов НЕ забивало процессор маленького сервера
+    # и бот/генерация не тормозили: пауза между страницами и между книгами (отдаём CPU боту).
+    ocr_page_pause: float = field(default_factory=lambda: float(os.getenv("OCR_PAGE_PAUSE", "0.5")))
+    ocr_book_pause: float = field(default_factory=lambda: float(os.getenv("OCR_BOOK_PAUSE", "5")))
 
     # Лимиты бесплатного тарифа
     # Сколько запусков теста (для группы) в день на бесплатном тарифе. 0 — без ограничения.

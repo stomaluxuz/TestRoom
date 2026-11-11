@@ -43,12 +43,14 @@ def looks_scanned(extracted_text: str, page_count: int) -> bool:
 
 
 def ocr_pdf(path: str, langs: str | None = None, dpi: int | None = None,
-            max_pages: int | None = None) -> str:
+            max_pages: int | None = None, page_pause: float | None = None) -> str:
     """Распознать текст из PDF постранично. СИНХРОННАЯ тяжёлая функция — только в потоке.
 
     Рендерим каждую страницу в картинку (pymupdf) и распознаём (tesseract). Страницы
-    обрабатываем по одной (не держим все картинки в памяти — важно для маленького сервера)."""
+    обрабатываем по одной (не держим все картинки в памяти — важно для маленького сервера).
+    page_pause — пауза между страницами, чтобы OCR отдавал процессор боту (не тормозил его)."""
     import io
+    import time
 
     import pymupdf
     import pytesseract
@@ -57,10 +59,12 @@ def ocr_pdf(path: str, langs: str | None = None, dpi: int | None = None,
     langs = langs or settings.ocr_langs
     dpi = dpi or settings.ocr_dpi
     max_pages = max_pages or settings.ocr_max_pages
+    page_pause = settings.ocr_page_pause if page_pause is None else page_pause
 
     parts: list[str] = []
     doc = pymupdf.open(path)
     try:
+        total = min(len(doc), max_pages)
         for i, page in enumerate(doc):
             if i >= max_pages:
                 break
@@ -73,6 +77,9 @@ def ocr_pdf(path: str, langs: str | None = None, dpi: int | None = None,
             except Exception:
                 # одна сбойная страница не должна рушить весь OCR
                 continue
+            # отдать процессор боту между страницами (троттлинг на маленьком сервере)
+            if page_pause > 0 and i + 1 < total:
+                time.sleep(page_pause)
     finally:
         doc.close()
     return "\n\n".join(parts).strip()
