@@ -502,6 +502,61 @@ def _material_block(material: str) -> str:
     )
 
 
+def _correct_is_long_outlier(q) -> bool:
+    """Правильный вариант заметно ДЛИННЕЕ остальных? (его видно по длине — надо выровнять)."""
+    opts = q.options or []
+    ci = q.correct
+    if len(opts) < 2 or not (0 <= ci < len(opts)):
+        return False
+    lens = [len((o or "").strip()) for o in opts]
+    others = [l for i, l in enumerate(lens) if i != ci]
+    if not others:
+        return False
+    avg = sum(others) / len(others)
+    # правильный — СТРОГО самый длинный, в 1.25× длиннее среднего и минимум на 6 символов длиннее 2-го
+    return lens[ci] == max(lens) and lens[ci] > 1.25 * avg and (lens[ci] - max(others)) >= 6
+
+
+async def _balance_long_answers(questions: list, lang: str) -> list:
+    """Детерминированно убираем «правильный = самый длинный»: находим такие вопросы и одним
+    запросом переписываем их ВАРИАНТЫ в равную длину (смысл и правильный ответ сохраняем).
+    Промпту модель не всегда подчиняется, поэтому проверяем и правим уже готовый тест."""
+    from .parsers import parse_text
+
+    flagged = [i for i, q in enumerate(questions) if _correct_is_long_outlier(q)][:25]
+    if not flagged:
+        return questions
+    lines = []
+    for n, i in enumerate(flagged, 1):
+        q = questions[i]
+        lines.append(f"{n}. {q.text}")
+        for j, o in enumerate(q.options):
+            lines.append(f"{'*' if j == q.correct else ''}{chr(65 + j)}) {o}")
+        lines.append("")
+    prompt = (
+        "В этих вопросах ПРАВИЛЬНЫЙ вариант (со звёздочкой) заметно ДЛИННЕЕ остальных — его видно "
+        "по длине. Перепиши ВАРИАНТЫ каждого так, чтобы все 4 были примерно ОДИНАКОВОЙ длины "
+        "(удлини неправильные до уровня правильного и/или слегка сократи правильный), СОХРАНИ смысл "
+        "и ТОТ ЖЕ правильный вариант (звёздочку оставь на нём). Текст вопроса НЕ меняй. Ответь в ТОМ "
+        "ЖЕ формате и ТОМ ЖЕ порядке (номер, вопрос, 4 варианта, звёздочка перед правильным).\n\n"
+        + "\n".join(lines)
+        + f"\n{_lang_instr(lang)}"
+    )
+    try:
+        text = await _ask(SYSTEM_TEST, prompt, max_tokens=8000)
+        rew = parse_text(text).questions
+    except Exception:
+        return questions
+    for n, i in enumerate(flagged):
+        if n < len(rew):
+            r = rew[n]
+            # заменяем только если переписанное валидно и БОЛЬШЕ не выброс по длине
+            if len(r.options) == 4 and 0 <= r.correct < 4 and not _correct_is_long_outlier(r):
+                questions[i].options = r.options
+                questions[i].correct = r.correct
+    return questions
+
+
 async def generate_test_questions(
     topic: str, count: int = 10, lang: str = "ru", context: str = "", strict: bool = False,
     difficulty: str = "medium",
@@ -546,4 +601,10 @@ async def generate_test_questions(
             )
         text = await _ask(SYSTEM_TEST, prompt, max_tokens=8000)
         collected += parse_text(text).questions
-    return collected[:count]
+    collected = collected[:count]
+    # Программный балансир: убираем «правильный ответ = самый длинный» (промпту модель не верна).
+    try:
+        collected = await _balance_long_answers(collected, lang)
+    except Exception:
+        pass
+    return collected

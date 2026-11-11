@@ -42,7 +42,7 @@ async def test_generate_strict_uses_material_and_allows_empty_topic(monkeypatch)
     captured = {}
 
     async def fake_ask(system, prompt, max_tokens=4000):
-        captured["prompt"] = prompt
+        captured.setdefault("prompt", prompt)  # первый вызов = генерация (не балансир длины)
         return CANNED
 
     monkeypatch.setattr(ai, "_ask", fake_ask)
@@ -65,7 +65,7 @@ async def test_generate_strict_caps_long_material(monkeypatch):
     captured = {}
 
     async def fake_ask(system, prompt, max_tokens=4000):
-        captured["prompt"] = prompt
+        captured.setdefault("prompt", prompt)  # первый вызов = генерация (не балансир длины)
         return CANNED
 
     monkeypatch.setattr(ai, "_ask", fake_ask)
