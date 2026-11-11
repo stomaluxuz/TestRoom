@@ -605,6 +605,45 @@ const LIBT = {
 };
 function libT() { return LIBT[LANG] || LIBT.ru; }
 
+// Карточка результата: тексты по языку + иконки по уровню (совпадает с бэкенд-карточкой).
+const RES = {
+  ru: {
+    champion: { t: "Чемпион!", s: "Ты знаешь тему на отлично. Так держать!" },
+    great: { t: "Отличная работа!", s: "Крепкие знания. Ещё чуть-чуть до вершины!" },
+    good: { t: "Хороший старт!", s: "Движешься верно. Повтори тему — и будет отлично!" },
+    start: { t: "Всё впереди!", s: "Каждый эксперт начинал с нуля. Повтори и попробуй снова!" },
+    score: (x, n) => `Правильных: ${x} из ${n}`,
+    share: "📤 Поделиться результатом", sharing: "Отправляю…",
+    sent: "Карточка отправлена в чат с ботом — делись! 🎉",
+  },
+  uz: {
+    champion: { t: "Chempion!", s: "Mavzuni a'lo bilasan. Shu zayilda davom et!" },
+    great: { t: "Ajoyib natija!", s: "Bilimlaring mustahkam. Cho'qqiga ozgina qoldi!" },
+    good: { t: "Yaxshi boshlanish!", s: "To'g'ri yo'ldasan. Mavzuni takrorla — a'lo bo'ladi!" },
+    start: { t: "Hammasi oldinda!", s: "Har bir mutaxassis noldan boshlagan. Takrorlab, yana urinib ko'r!" },
+    score: (x, n) => `To'g'ri: ${x} / ${n}`,
+    share: "📤 Natija bilan ulashish", sharing: "Yuborilmoqda…",
+    sent: "Kartochka bot chatiga yuborildi — ulash! 🎉",
+  },
+  en: {
+    champion: { t: "Champion!", s: "You know this topic perfectly. Keep it up!" },
+    great: { t: "Great job!", s: "Solid knowledge. Almost at the top!" },
+    good: { t: "Good start!", s: "You're on the right track. Review and you'll ace it!" },
+    start: { t: "It's just the start!", s: "Every expert started somewhere. Review and try again!" },
+    score: (x, n) => `Correct: ${x} of ${n}`,
+    share: "📤 Share result", sharing: "Sending…",
+    sent: "Card sent to the bot chat — share it! 🎉",
+  },
+};
+function resT() { return RES[LANG] || RES.ru; }
+function resTier(x, n) { const r = n ? x / n : 0; return r >= 0.9 ? "champion" : r >= 0.7 ? "great" : r >= 0.5 ? "good" : "start"; }
+const RES_ICON = {
+  champion: `<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/><circle cx="12" cy="8" r="1.6" fill="#fff" stroke="none"/></svg>`,
+  great: `<svg viewBox="0 0 24 24"><path d="M12 2l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 15.9 6.7 18.2l1-5.8L3.5 8.2l5.9-.9L12 2z"/></svg>`,
+  good: `<svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h6v6"/></svg>`,
+  start: `<svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2 0-2.8a2 2 0 0 0-3 .8z"/><path d="M12 15l-3-3c1-5 5-8 10-8 0 5-3 9-8 10z"/><circle cx="15" cy="9" r="1.4"/></svg>`,
+};
+
 async function libraryScreen(params = {}) {
   const L = libT();
   let subjects;
@@ -1016,15 +1055,30 @@ function resultScreen(st) {
   }
   // Пока тест идёт для группы — разбор скрыт целиком (защита от списывания).
   if (st.answers_later) review += `<div class="card muted small">${t("answers_locked")}</div>`;
+  const tier = resTier(st.correct, st.total);
+  const R = resT();
   render(`
-    <p class="muted small" style="text-align:center">${esc(st.subject)} · ${esc(st.test_title)}</p>
-    <div class="result-big">${st.correct} / ${st.total}</div>
-    <p class="muted" style="text-align:center;margin-top:0">${pct}% · ${t("time_word")} ${fmtTime(st.duration_sec)}</p>
-    <div class="card">${esc(reasons[st.reason] || t("r_default"))}</div>
+    <div class="rcard rt-${tier}">
+      <div class="rc-ic">${RES_ICON[tier]}</div>
+      <div class="rc-title">${R[tier].t}</div>
+      <div class="rc-fio">${esc(ME && ME.full_name || "")}</div>
+      <div class="rc-score">${R.score(st.correct, st.total)}</div>
+      <div class="rc-sub">${R[tier].s}</div>
+      <div class="rc-test">${esc(st.test_title || "")}</div>
+    </div>
+    <button class="btn" id="share">${R.share}</button>
+    <p class="muted small" style="text-align:center">${t("time_word")} ${fmtTime(st.duration_sec)} · ${esc(reasons[st.reason] || t("r_default"))}</p>
     ${review}
     <button class="btn secondary" id="home">${t("back_home")}</button>
   `);
   haptic("success");
+  on("#share", "click", async (e) => {
+    const b = e.currentTarget, old = b.textContent;
+    b.disabled = true; b.textContent = R.sharing;
+    try { await api(`/api/student/attempts/${st.attempt_id}/share`, { json: {} }); toast(R.sent); }
+    catch (err) { toast(err.message); }
+    finally { b.disabled = false; b.textContent = old; }
+  });
   on("#home", "click", home);
 }
 

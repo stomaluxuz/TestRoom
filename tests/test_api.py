@@ -149,6 +149,9 @@ async def test_end_to_end(client):
             )
         ).json()
     assert st["status"] == "finished" and st["reason"] == "done"
+    # карточка результата рендерится (503 = дошли до отправки, упёрлись лишь в отсутствие бота)
+    r = await client.post(f"/api/student/attempts/{st['attempt_id']}/share", headers=S, json={})
+    assert r.status_code == 503
 
     live = (await client.get(f"/api/teacher/sessions/{sess['id']}/live", headers=T)).json()
     assert live["finished_count"] == 1 and live["students"][0]["leaves"] == 1

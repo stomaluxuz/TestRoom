@@ -41,6 +41,9 @@ class Settings:
     admin_ids: set[int] = field(default_factory=lambda: _ids(os.getenv("ADMIN_IDS", "")))
     # Публичный https-адрес, по которому открывается Mini App
     webapp_url: str = field(default_factory=_webapp_url)
+    # Юзернейм бота (без @), для ссылки на карточке результата. По умолчанию — рабочий бот;
+    # при старте getMe подтвердит/обновит его автоматически (см. setup_bot).
+    bot_username: str = field(default_factory=lambda: os.getenv("BOT_USERNAME", "testroom_ai").lstrip("@"))
     # База данных. По умолчанию SQLite-файл рядом с проектом.
     database_url: str = field(
         default_factory=lambda: os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./testbot.db")

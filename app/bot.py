@@ -1742,6 +1742,13 @@ def create_bot() -> tuple[Bot, Dispatcher]:
 async def setup_bot(bot: Bot):
     from aiogram.types import BotCommand
 
+    try:  # источник правды для ссылки на карточке результата — сам бот
+        me = await bot.get_me()
+        if me.username:
+            settings.bot_username = me.username
+    except Exception as e:
+        log.warning("Не удалось получить username бота (оставляю %s): %s", settings.bot_username, e)
+
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Меню"),

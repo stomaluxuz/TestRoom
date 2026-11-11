@@ -539,6 +539,29 @@ def create_app() -> FastAPI:
     async def leave(attempt_id: int, body: LeaveIn, uid: int = Depends(current_user_id), db: AsyncSession = Depends(get_db)):
         return await svc.report_leave(db, uid, attempt_id, body.seconds)
 
+    @app.post("/api/student/attempts/{attempt_id}/share")
+    async def share_result(
+        attempt_id: int, request: Request, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+    ):
+        """Рисует карточку результата и отправляет её в чат студента с ботом (для репоста)."""
+        png = await svc.result_card_png(db, user, attempt_id)
+        if bot_ref.bot is None:
+            raise svc.ServiceError("Бот не запущен — карточку отправить не получилось.", 503)
+        from aiogram.types import BufferedInputFile
+
+        lang = getattr(user, "lang", None) or "ru"
+        link = f"https://t.me/{settings.bot_username}" if settings.bot_username else ""
+        cap = {
+            "ru": "🎉 Твой результат! Поделись и позови друзей:",
+            "uz": "🎉 Natijang! Ulashib, do'stlaringni chaqir:",
+            "en": "🎉 Your result! Share it and invite friends:",
+        }.get(lang, "🎉 Твой результат!")
+        caption = f"{cap}\n{link}".strip()
+        await bot_ref.bot.send_photo(
+            request.state.real_user_id, BufferedInputFile(png, filename="result.png"), caption=caption
+        )
+        return {"ok": True}
+
     @app.get("/api/student/history")
     async def my_history(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         return await svc.student_history(db, user)

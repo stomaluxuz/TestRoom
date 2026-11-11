@@ -125,6 +125,23 @@ label { display: block; margin-top: 12px; font-size: 13px; color: var(--hint); }
 .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
 .timer.low { color: var(--danger); }
 .result-big { font-size: 46px; font-weight: 700; text-align: center; margin: 10px 0 0; }
+
+/* Карточка результата (мотивирующая, по уровню) */
+.rcard { border-radius: 24px; padding: 24px 22px 20px; color: #fff; text-align: center;
+  margin: 6px 0 14px; box-shadow: 0 12px 30px rgba(0,0,0,.18); }
+.rt-champion { background: linear-gradient(160deg,#F7B733,#FC4A1A); }
+.rt-great { background: linear-gradient(160deg,#11998e,#38ef7d); }
+.rt-good { background: linear-gradient(160deg,#2193b0,#6dd5ed); }
+.rt-start { background: linear-gradient(160deg,#7F53AC,#647DEE); }
+.rc-ic svg { width: 80px; height: 80px; stroke: #fff; fill: none; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round; }
+.rc-title { font-size: 25px; font-weight: 800; margin-top: 4px; }
+.rc-fio { font-size: 18px; font-weight: 700; margin-top: 8px; display: inline-block;
+  border-bottom: 2px solid rgba(255,255,255,.5); padding-bottom: 3px; }
+.rc-score { font-size: 17px; font-weight: 700; margin-top: 12px; display: inline-block;
+  background: rgba(255,255,255,.22); padding: 7px 18px; border-radius: 30px; }
+.rc-sub { font-size: 15px; line-height: 1.38; margin-top: 12px; opacity: .97; }
+.rc-test { font-size: 13px; opacity: .9; margin-top: 10px; }
 .qedit .opt { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .qedit .opt input[type=radio] { width: auto; margin: 0; }
 .right { color: var(--ok); }

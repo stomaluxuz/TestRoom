@@ -1115,6 +1115,24 @@ async def _review(db: AsyncSession, a: Attempt, reveal: bool = True) -> list[dic
     return out
 
 
+async def result_card_png(db: AsyncSession, user, attempt_id: int) -> bytes:
+    """PNG-карточка результата для шаринга (на языке студента). Рендер — в отдельном
+    потоке, соединение БД отпускаем заранее (не держим на время рисования)."""
+    from . import resultcard
+
+    a, m = await _own_attempt(db, user, attempt_id)
+    if not a.is_finished:
+        raise ServiceError("Тест ещё не завершён.", 400)
+    # фиксируем значения ДО rollback (он «протухает» ORM-объект)
+    correct, total = a.correct_count or 0, a.total or 0
+    name = a.full_name or getattr(user, "full_name", "") or ""
+    title, lang = m.test_title, (getattr(user, "lang", None) or "ru")
+    await db.rollback()  # отпустить соединение на время CPU-рендера
+    return await asyncio.to_thread(
+        resultcard.render_result_card, lang, name, correct, total, title, settings.bot_username
+    )
+
+
 async def submit_answer(db: AsyncSession, user, attempt_id: int, question_id: int, option_index: int) -> dict:
     a, m = await _own_attempt(db, user, attempt_id)
     if a.is_finished:
