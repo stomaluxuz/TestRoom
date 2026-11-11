@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -18,6 +19,8 @@ from .config import settings
 from .models import User
 from .parsers import ParseFailed, parse_file
 from .universities import UNIVERSITIES
+
+log = logging.getLogger("api")
 
 WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
 MAX_UPLOAD = 10 * 1024 * 1024
@@ -544,7 +547,14 @@ def create_app() -> FastAPI:
         attempt_id: int, request: Request, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
     ):
         """Рисует карточку результата и отправляет её в чат студента с ботом (для репоста)."""
-        png = await svc.result_card_png(db, user, attempt_id)
+        try:
+            png = await svc.result_card_png(db, user, attempt_id)
+        except svc.ServiceError:
+            raise
+        except Exception as e:  # ошибка рисования — не роняем 500, сообщаем понятно
+            log.exception("Не удалось нарисовать карточку результата")
+            raise svc.ServiceError(f"Не удалось нарисовать карточку: {type(e).__name__}", 500)
+
         if bot_ref.bot is None:
             raise svc.ServiceError("Бот не запущен — карточку отправить не получилось.", 503)
         from aiogram.types import BufferedInputFile
@@ -557,9 +567,26 @@ def create_app() -> FastAPI:
             "en": "🎉 Your result! Share it and invite friends:",
         }.get(lang, "🎉 Твой результат!")
         caption = f"{cap}\n{link}".strip()
-        await bot_ref.bot.send_photo(
-            request.state.real_user_id, BufferedInputFile(png, filename="result.png"), caption=caption
-        )
+        chat_id = request.state.real_user_id
+        # Отправляем фото без HTML-разметки (подпись — обычный текст). Если send_photo
+        # почему-то не прошёл — пробуем документом (проверенный путь), чтобы карточка дошла.
+        try:
+            await bot_ref.bot.send_photo(
+                chat_id, BufferedInputFile(png, filename="result.jpg"),
+                caption=caption, parse_mode=None,
+            )
+        except Exception as e:
+            log.exception("send_photo карточки не прошёл, пробую send_document")
+            try:
+                await bot_ref.bot.send_document(
+                    chat_id, BufferedInputFile(png, filename="result.jpg"),
+                    caption=caption, parse_mode=None,
+                )
+            except Exception as e2:
+                log.exception("send_document карточки тоже не прошёл")
+                raise svc.ServiceError(
+                    f"Не удалось отправить карточку: {type(e).__name__}: {str(e)[:150]}", 502
+                )
         return {"ok": True}
 
     @app.get("/api/student/history")

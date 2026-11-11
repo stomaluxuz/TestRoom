@@ -200,6 +200,8 @@ def render_result_card(lang: str, full_name: str, correct: int, total: int,
         bf = _font(True, 40)
         _center_text(d, H - 130, "TestRoom", bf, (255, 255, 255, 230))
 
+    # JPEG, а не PNG: Telegram-фото нативно в JPEG (send_photo надёжнее обрабатывает),
+    # и градиент весит в разы меньше.
     out = io.BytesIO()
-    img.convert("RGB").save(out, "PNG")
+    img.convert("RGB").save(out, "JPEG", quality=92)
     return out.getvalue()
