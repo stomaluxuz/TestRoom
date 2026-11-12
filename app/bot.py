@@ -1717,6 +1717,28 @@ async def give_pro(message: Message, command: CommandObject, bot: Bot):
         pass
 
 
+@router.message(Command("ocr", "ocrstatus"))
+async def ocr_status_cmd(message: Message):
+    """Статус распознавания сканов (OCR): сколько в очереди/готово/с ошибкой."""
+    if not is_admin(message.from_user.id):
+        return
+    from . import ocr as ocrmod
+
+    async with dbmod.SessionLocal() as db:
+        st = await svc.ocr_stats(db)
+    tess = "✅ есть" if ocrmod.tesseract_available() else "❌ нет"
+    on = "включён" if settings.ocr_enabled else "выключен"
+    await message.answer(
+        "📖 <b>OCR сканов</b>\n"
+        f"Движок tesseract: {tess} · статус: {on}\n\n"
+        f"⏳ В очереди (ещё не распознаны): <b>{st['pending']}</b>\n"
+        f"✅ Распознаны: <b>{st['done']}</b>\n"
+        f"⚠️ С ошибкой: <b>{st['error']}</b>\n"
+        f"📄 Обычные книги (не сканы): {st['not_scan']}\n\n"
+        + ("Все сканы обработаны 🎉" if st["pending"] == 0 else "Распознавание идёт в фоне, по одной книге.")
+    )
+
+
 @router.message(Command("addbalance", "balance_add"))
 async def addbalance_cmd(message: Message, command: CommandObject, bot: Bot):
     """Начислить баланс вручную: /addbalance <ID> <сумма> (для возвратов/ручных зачислений)."""

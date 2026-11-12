@@ -2494,6 +2494,22 @@ async def index_library_doc(db: AsyncSession, doc: LibraryDoc, pace: float = 0.0
     return len(chunks)
 
 
+async def ocr_stats(db: AsyncSession) -> dict:
+    """Сводка по OCR сканов: сколько в очереди / распознано / с ошибкой (по одобренным книгам)."""
+    rows = (await db.execute(
+        select(LibraryDoc.ocr_status, func.count())
+        .where(LibraryDoc.status == "approved")
+        .group_by(LibraryDoc.ocr_status)
+    )).all()
+    by = {status: n for status, n in rows}
+    return {
+        "pending": by.get("pending", 0),
+        "done": by.get("done", 0),
+        "error": by.get("error", 0),
+        "not_scan": by.get(None, 0),  # обычные книги (не сканы) — OCR не требуется
+    }
+
+
 async def pending_ocr_doc_ids(db: AsyncSession) -> list[int]:
     """ID одобренных книг, ждущих распознавания скана (OCR)."""
     rows = await db.scalars(
