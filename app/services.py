@@ -2609,10 +2609,13 @@ async def reindex_library(db: AsyncSession, only_missing: bool = True) -> dict:
 
 
 async def library_context(
-    db: AsyncSession, query: str, k: int | None = None, min_score: float | None = None
+    db: AsyncSession, query: str, k: int | None = None, min_score: float | None = None,
+    only_docs: set[int] | list[int] | None = None,
 ) -> dict:
     """Ищет в библиотеке самые близкие к теме куски (косинус по эмбеддингам).
 
+    only_docs — если задан, ищем ТОЛЬКО в этих книгах (пользователь выбрал конкретные книги):
+    тогда порог близости не применяем (книги выбраны явно) и берём побольше кусков.
     Возвращает {found, context, sources, score}. found=False → релевантного нет, генерим как обычно."""
     from . import embeddings as emb
 
@@ -2620,8 +2623,13 @@ async def library_context(
     query = " ".join((query or "").split())
     if not query or not emb.is_enabled():
         return empty
+    only = set(only_docs) if only_docs else None
     k = k or settings.rag_top_k
-    min_score = settings.rag_min_score if min_score is None else min_score
+    if only:
+        k = max(k, 10)            # выбранные книги — берём больше кусков для охвата
+        min_score = 0.0 if min_score is None else min_score  # не отсекаем: книги выбраны явно
+    else:
+        min_score = settings.rag_min_score if min_score is None else min_score
     try:
         # быстрый отказ: при rate limit не заставляем пользователя ждать — просто фолбэк на общие знания
         qvec = emb.normalize((await emb.embed_texts([query], input_type="query", max_retries=1))[0])
@@ -2630,7 +2638,9 @@ async def library_context(
     cache = await _get_vec_cache(db)  # векторы из памяти (не читаем с диска каждый раз)
     if not cache:
         return empty
-    scored = [(emb.dot(qvec, vec), cid, did) for cid, did, vec in cache]
+    scored = [(emb.dot(qvec, vec), cid, did) for cid, did, vec in cache if (only is None or did in only)]
+    if not scored:
+        return empty
     scored.sort(key=lambda x: x[0], reverse=True)
     top = [s for s in scored[:k] if s[0] >= min_score]
     if not top:

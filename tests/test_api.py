@@ -48,6 +48,38 @@ async def test_unauthorized(client):
     assert r.status_code == 401
 
 
+async def test_ai_presentation_endpoint(client, monkeypatch):
+    """Форма презентации: выбор книг только Pro+; без книг — очередь + списание."""
+    from app import api as apimod
+    from app import db as dbmod
+    from app import services as svc
+
+    calls = []
+
+    async def fake_run(*a, **k):
+        calls.append(a)
+
+    monkeypatch.setattr(apimod, "_run_presentation", fake_run)
+
+    H = headers(900)
+    await client.post("/api/me/name", headers=H, json={"full_name": "Студент Один"})
+    async with dbmod.SessionLocal() as db:
+        u = await svc.get_or_create_user(db, 900)
+        u.balance = 100000  # цена презентации 5000
+        await db.commit()
+
+    # обычный студент с выбором книг → только Pro+
+    r = await client.post("/api/ai/presentation", headers=H, json={"topic": "Кариес", "book_ids": [1, 2]})
+    assert r.status_code == 402
+
+    # без книг — ставится в очередь, списано 5000
+    r = await client.post("/api/ai/presentation", headers=H, json={"topic": "Кариес", "slides": 8})
+    assert r.status_code == 200 and r.json().get("queued") is True
+    assert len(calls) == 1
+    async with dbmod.SessionLocal() as db:
+        assert (await svc.get_or_create_user(db, 900)).balance == 95000
+
+
 async def test_lang_sync(client):
     """Язык из Mini App сохраняется в БД — общий с ботом."""
     H = headers(900)

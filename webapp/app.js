@@ -925,6 +925,7 @@ async function studentHome() {
       <button class="btn" id="join">${t("start_test")}</button>
     </div>
     ${payCard}
+    <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
     ${extra}
     <h2>${t("my_results")}</h2>
     <div id="hist" class="muted small">${t("loading")}</div>
@@ -934,6 +935,7 @@ async function studentHome() {
   code.addEventListener("input", () => { code.value = code.value.replace(/\D/g, "").slice(0, 6); });
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
   on("#join", "click", join);
+  on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#topup", "click", () => {
     toast("Откройте чат бота и нажмите «💳 Пополнить баланс»");
     try { tg && tg.close(); } catch (e) {}
@@ -1197,6 +1199,7 @@ async function teacherHome() {
     <div class="item" id="tests"><span class="ico">📚</span><div class="grow">${t("my_tests")}</div></div>
     <div class="item" id="upload"><span class="ico">📤</span><div class="grow">${t("upload_test")}</div></div>
     <div class="item" id="history"><span class="ico">🕘</span><div class="grow">${t("history")}</div></div>
+    <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
     <div class="item" id="aichat"><span class="ico">💬</span><div class="grow">${t("ai_assistant")}</div>${ME.is_pro_plus || ME.is_admin ? "" : `<span class="badge pro">Pro+</span>`}<span class="muted">›</span></div>
     <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
     <div class="item" id="libupload"><span class="ico">⬆️</span><div class="grow">${libT().upload}</div></div>
@@ -1214,6 +1217,7 @@ async function teacherHome() {
   on("#tests", "click", () => go(testsScreen));
   on("#upload", "click", () => go(uploadScreen));
   on("#history", "click", () => go(historyScreen));
+  on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#aichat", "click", () => go(aiChatScreen));
   on("#library", "click", () => go(libraryScreen));
   on("#libupload", "click", () => go(libraryUploadScreen));
@@ -1987,6 +1991,84 @@ function adminTeacherScreen({ t }) {
     try { tg ? tg.openLink(u) : window.open(u, "_blank"); } catch (_) { window.open(u, "_blank"); }
   });
 })();
+
+/* ------------------------------------------------- Презентация (форма в приложении) */
+const PRESF = {
+  ru: { title: "Презентация", topic: "Тема", topic_ph: "Например: Анатомия сердца",
+        lang: "Язык презентации", slides: "Сколько слайдов (до 20)", group: "Группа (необязательно)",
+        group_ph: "Напр. 201-С", books: "📚 Книги из библиотеки (можно несколько)",
+        books_hint: "Выбери книги — презентация будет строго по ним.", nobooks: "В библиотеке пока нет книг.",
+        books_pro: "Выбор книг для презентации доступен в Pro+.", create: "Создать презентацию",
+        deliver: "Готовый файл придёт в чат с ботом (это займёт немного времени).",
+        need_topic: "Напишите тему", sending: "Отправляю…",
+        queued: "⏳ Генерирую! Файл придёт в чат с ботом." },
+  uz: { title: "Taqdimot", topic: "Mavzu", topic_ph: "Masalan: Yurak anatomiyasi",
+        lang: "Taqdimot tili", slides: "Nechta slayd (20 gacha)", group: "Guruh (ixtiyoriy)",
+        group_ph: "Masalan 201-S", books: "📚 Kutubxona kitoblari (bir nechta mumkin)",
+        books_hint: "Kitoblarni tanla — taqdimot aynan ular asosida bo'ladi.", nobooks: "Kutubxonada hali kitob yo'q.",
+        books_pro: "Kitob tanlash Pro+ da mavjud.", create: "Taqdimot yaratish",
+        deliver: "Tayyor fayl bot chatiga keladi (biroz vaqt oladi).",
+        need_topic: "Mavzuni yozing", sending: "Yuborilmoqda…",
+        queued: "⏳ Yaratyapman! Fayl bot chatiga keladi." },
+  en: { title: "Presentation", topic: "Topic", topic_ph: "E.g. Heart anatomy",
+        lang: "Presentation language", slides: "Number of slides (up to 20)", group: "Group (optional)",
+        group_ph: "E.g. 201-C", books: "📚 Library books (you can pick several)",
+        books_hint: "Pick books — the presentation will be strictly from them.", nobooks: "No books in the library yet.",
+        books_pro: "Choosing books is available in Pro+.", create: "Create presentation",
+        deliver: "The file will arrive in the bot chat (takes a little time).",
+        need_topic: "Type the topic", sending: "Sending…",
+        queued: "⏳ Generating! The file will arrive in the bot chat." },
+};
+
+async function presentationStudioScreen() {
+  try { ME = await api("/api/me"); } catch (e) {}
+  const P = PRESF[LANG] || PRESF.ru;
+  const proplus = !!(ME.is_pro_plus || ME.is_admin);
+  let books = [];
+  if (proplus) { try { books = await api("/api/library/docs"); } catch (e) {} }
+  const booksUI = proplus
+    ? `<label>${P.books}</label>
+       <div class="booksel">${books.length
+          ? books.map(b => `<label class="bchk"><input type="checkbox" value="${b.id}"> <span class="grow">${esc(b.title)}</span><span class="muted small">${esc(b.subject || "")}</span></label>`).join("")
+          : `<p class="muted small">${P.nobooks}</p>`}</div>
+       <p class="muted small">${P.books_hint}</p>`
+    : `<div class="card muted small" style="margin:8px 0">🔒 ${P.books_pro}</div>`;
+  render(`
+    ${langBar()}
+    <h1>🖥 ${P.title}</h1>
+    <div class="card">
+      <label>${P.topic}</label>
+      <input id="ptopic" placeholder="${P.topic_ph}">
+      <label>${P.lang}</label>
+      <div class="langpick">${["ru", "uz", "en"].map(l => `<button class="lbtn ${l === LANG ? "on" : ""}" data-l="${l}">${l.toUpperCase()}</button>`).join("")}</div>
+      <label>${P.slides}</label>
+      <input id="pslides" type="number" min="1" max="20" value="10">
+      <label>${P.group}</label>
+      <input id="pgroup" placeholder="${P.group_ph}">
+      ${booksUI}
+      <button class="btn" id="pcreate">✨ ${P.create}</button>
+      <p class="muted small">${P.deliver}</p>
+    </div>
+    <button class="link" id="pback">${t("back") || "Назад"}</button>
+  `);
+  let plang = LANG;
+  onAll(".lbtn", "click", el => { plang = el.dataset.l; $app.querySelectorAll(".lbtn").forEach(x => x.classList.toggle("on", x === el)); });
+  on("#pback", "click", () => back());
+  on("#pcreate", "click", async (e) => {
+    const topic = document.getElementById("ptopic").value.trim();
+    if (!topic) { toast(P.need_topic); return; }
+    const slides = +document.getElementById("pslides").value || 10;
+    const group = document.getElementById("pgroup").value.trim();
+    const book_ids = proplus ? [...$app.querySelectorAll(".booksel input:checked")].map(x => +x.value) : [];
+    const b = e.currentTarget, old = b.textContent;
+    b.disabled = true; b.textContent = P.sending;
+    try {
+      await api("/api/ai/presentation", { json: { topic, lang: plang, slides, group, book_ids } });
+      toast(P.queued); haptic("success");
+      setTimeout(() => back(), 900);
+    } catch (err) { toast(err.message); b.disabled = false; b.textContent = old; }
+  });
+}
 
 /* ---------------------------------------------------------------- ИИ-чат (Pro+) */
 let _aichat = [];

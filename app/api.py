@@ -135,6 +135,57 @@ async def _run_broadcast(ids: list[int], text: str, admin_id: int):
         pass
 
 
+async def _run_presentation(uid, target_id, topic, lang, slides, author_name, group, book_ids, charged):
+    """Фоновая генерация презентации из формы приложения: RAG (по выбранным книгам, если есть) →
+    слайды → .pptx → отправка в чат с ботом. При сбое — возврат средств и уведомление."""
+    from . import limits
+    from .ai import generate_slides
+    from .present import build_presentation
+    from .present import parse as _parse
+
+    try:
+        async with limits.gen_slot():
+            async with dbmod.SessionLocal() as db, limits.timing("rag"):
+                ctx = await svc.library_context(db, topic, only_docs=set(book_ids) if book_ids else None)
+            async with limits.timing("text"):
+                raw = await generate_slides(topic, slides=slides, lang=lang, context=ctx["context"])
+            # короткий заголовок от ИИ + подпись автора/группы на языке презентации
+            atitle, _sub, _sl = _parse(raw)
+            idx = raw.find("#")
+            slides_part = raw[idx:] if idx != -1 else raw
+            clean_title = " ".join(atitle.split())[:100] or "Презентация"
+            by = {"ru": "Выполнил(а)", "uz": "Bajardi", "en": "Prepared by"}.get(lang, "Выполнил(а)")
+            grp = {"ru": "Группа", "uz": "Guruh", "en": "Group"}.get(lang, "Группа")
+            author = f"{by}: {author_name} · {grp} {group}" if (author_name or group) else ""
+            final = f"{clean_title}\n{author}\n\n{slides_part}"
+            async with limits.timing("photos+build"):
+                name, blob = await build_presentation(final, max_per_slide=2, sources=ctx.get("sources"))
+        if bot_ref.bot is not None:
+            from aiogram.types import BufferedInputFile
+            src = ""
+            if ctx.get("found") and ctx.get("sources"):
+                src = "\nПо материалам: " + "; ".join(ctx["sources"][:3])
+            cap = {"ru": "Готовая презентация ✅ Тема: ", "uz": "Tayyor taqdimot ✅ Mavzu: ",
+                   "en": "Presentation ready ✅ Topic: "}.get(lang, "Готовая презентация ✅ Тема: ")
+            await bot_ref.bot.send_document(
+                target_id, BufferedInputFile(blob, name), caption=f"{cap}{topic}.{src}", parse_mode=None,
+            )
+    except Exception:
+        log.exception("Фоновая генерация презентации не удалась")
+        async with dbmod.SessionLocal() as db:
+            u = await svc.get_or_create_user(db, uid)
+            await svc.refund(db, u, charged)
+            await svc.release_presentation(db, u)
+        if bot_ref.bot is not None:
+            try:
+                msg = {"ru": "❌ Не удалось создать презентацию. Средства возвращены, попробуйте ещё раз.",
+                       "uz": "❌ Taqdimot yaratilmadi. Mablag' qaytarildi, qayta urinib ko'ring.",
+                       "en": "❌ Couldn't create the presentation. You were refunded, please try again."}.get(lang)
+                await bot_ref.bot.send_message(target_id, msg, parse_mode=None)
+            except Exception:
+                pass
+
+
 # ---------------------------------------------------------------- схемы запросов
 
 class NameIn(BaseModel):
@@ -251,6 +302,15 @@ class GrantIn(BaseModel):
     audience: str  # teachers | students | all
     amount: int = Field(ge=1, le=100_000_000)
     notify: bool = False
+
+
+class PresentationIn(BaseModel):
+    topic: str
+    lang: str = "ru"
+    slides: int = Field(10, ge=1, le=20)
+    author: str | None = None
+    group: str | None = None
+    book_ids: list[int] | None = None  # выбранные книги (только Pro+) — генерим по ним
 
 
 class LibrarySubjectIn(BaseModel):
@@ -589,6 +649,31 @@ def create_app() -> FastAPI:
                     f"Не удалось отправить карточку: {type(e).__name__}: {str(e)[:150]}", 502
                 )
         return {"ok": True}
+
+    @app.post("/api/ai/presentation")
+    async def ai_presentation(
+        body: PresentationIn, request: Request, user: User = Depends(current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """Создать презентацию из формы в приложении. Генерим В ФОНЕ (долго — фото/слайды),
+        готовый .pptx прилетает в чат с ботом. Выбор книг (book_ids) — только Pro+."""
+        topic = (body.topic or "").strip()
+        if not topic:
+            raise svc.ServiceError("Напишите тему презентации.")
+        lang = body.lang if body.lang in ("ru", "uz", "en") else "ru"
+        slides = max(1, min(int(body.slides or 10), 20))
+        book_ids = [int(x) for x in (body.book_ids or [])][:20]
+        if book_ids:
+            svc.require_pro_plus(user)  # выбор конкретных книг — пока только для Pro+
+        # Списываем заранее (студент), бронируем. Ошибку (нет денег) вернём сразу.
+        charged = await svc.charge_feature(db, user, "presentation")
+        await svc.reserve_presentation(db, user)
+        author = (body.author or user.full_name or "").strip()
+        group = (body.group or "").strip()
+        asyncio.create_task(_run_presentation(
+            user.id, request.state.real_user_id, topic, lang, slides, author, group, book_ids, charged
+        ))
+        return {"ok": True, "queued": True}
 
     @app.get("/api/student/history")
     async def my_history(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
