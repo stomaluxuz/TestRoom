@@ -1753,6 +1753,18 @@ async def remove_pro(db: AsyncSession, user_id: int) -> User:
     return user
 
 
+async def admin_add_balance(db: AsyncSession, user_id: int, amount: int) -> User:
+    """Админ вручную начисляет (или списывает при отрицательном) баланс пользователю."""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ServiceError("Пользователь не найден. Проверьте ID (студент должен был запускать бота).", 404)
+    user.balance = (user.balance or 0) + int(amount)
+    if user.balance < 0:
+        user.balance = 0
+    await db.commit()
+    return user
+
+
 async def set_blocked(db: AsyncSession, user_id: int, blocked: bool) -> User:
     user = await db.get(User, user_id)
     if user is None:

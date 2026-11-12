@@ -1717,6 +1717,31 @@ async def give_pro(message: Message, command: CommandObject, bot: Bot):
         pass
 
 
+@router.message(Command("addbalance", "balance_add"))
+async def addbalance_cmd(message: Message, command: CommandObject, bot: Bot):
+    """Начислить баланс вручную: /addbalance <ID> <сумма> (для возвратов/ручных зачислений)."""
+    if not is_admin(message.from_user.id):
+        return
+    parts = (command.args or "").split()
+    try:
+        uid = int(parts[0]); amount = int(parts[1])
+    except (ValueError, IndexError):
+        return await message.answer("Формат: /addbalance <ID> <сумма>\nНапример: /addbalance 123456789 1000")
+    async with dbmod.SessionLocal() as db:
+        try:
+            user = await svc.admin_add_balance(db, uid, amount)
+        except svc.ServiceError as e:
+            return await message.answer("❌ " + e.message)
+        svc.add_admin_log(db, message.from_user.id, uid, f"начислил {amount} сум вручную")
+        await db.commit()
+        name, bal = user.full_name or str(uid), user.balance or 0
+    await message.answer(f"✅ Начислено {_money(amount)}. Баланс {escape(name)}: <b>{_money(bal)}</b>")
+    try:
+        await bot.send_message(uid, f"✅ Вам начислено {_money(amount)}. Текущий баланс: {_money(bal)}.")
+    except Exception:
+        pass
+
+
 @router.message(Command("unpro"))
 async def unpro(message: Message, command: CommandObject, bot: Bot):
     if not is_admin(message.from_user.id):

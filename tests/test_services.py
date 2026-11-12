@@ -525,6 +525,17 @@ async def test_topup_flow(db):
     assert user.balance == 30000         # 25000 + 5000, а не + 10000
 
 
+async def test_admin_add_balance(db):
+    u = await make_student(db, 777)
+    user = await svc.admin_add_balance(db, 777, 1000)
+    assert user.balance == 1000
+    await svc.admin_add_balance(db, 777, 500)
+    assert (await svc.get_or_create_user(db, 777)).balance == 1500
+    # неизвестный ID → ошибка
+    with pytest.raises(svc.ServiceError):
+        await svc.admin_add_balance(db, 99999, 1000)
+
+
 async def test_settings_get_set(db):
     cfg = await svc.get_settings(db)
     assert cfg["price_presentation"] == "5000"  # значение по умолчанию
