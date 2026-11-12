@@ -371,7 +371,10 @@ async function api(path, opts = {}) {
   return data;
 }
 
-function render(html) { $app.innerHTML = html; window.scrollTo(0, 0); bindLang(); }
+function render(html) {
+  document.body.classList.remove("testing");  // по умолчанию подпись-ссылка видна
+  $app.innerHTML = html; window.scrollTo(0, 0); bindLang();
+}
 function on(sel, ev, fn) { const el = $app.querySelector(sel); if (el) el.addEventListener(ev, fn); }
 function onAll(sel, ev, fn) { $app.querySelectorAll(sel).forEach(el => el.addEventListener(ev, e => fn(el, e))); }
 
@@ -990,6 +993,9 @@ function attemptScreen({ state }) {
     ${q.options.map((o, i) => `<div class="option" data-i="${i}">${String.fromCharCode(65 + i)}) ${esc(o)}</div>`).join("")}
     <button class="btn" id="answer" disabled>${t("answer")}</button>
   `);
+  // Во время теста прячем подпись-ссылку на Instagram внизу — чтобы студент
+  // случайно не нажал на неё и не вышел из теста.
+  document.body.classList.add("testing");
   let answered = false, pendingNext = null;  // режим обучения: сначала показать ответ, потом «Дальше»
   onAll(".option", "click", el => {
     if (answered) return;

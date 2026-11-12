@@ -171,3 +171,6 @@ label { display: block; margin-top: 12px; font-size: 13px; color: var(--hint); }
   color: var(--hint); font-size: 13px; }
 .credit a { color: var(--link); text-decoration: none; font-weight: 600; }
 .credit a:active { opacity: .7; }
+/* Во время прохождения теста прячем подпись-ссылку (Instagram), чтобы студент
+   случайно не нажал и не вышел из теста. */
+body.testing .credit { display: none; }
