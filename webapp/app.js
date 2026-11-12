@@ -1996,27 +1996,30 @@ function adminTeacherScreen({ t }) {
 const PRESF = {
   ru: { title: "Презентация", topic: "Тема", topic_ph: "Например: Анатомия сердца",
         lang: "Язык презентации", slides: "Сколько слайдов (до 20)", group: "Группа (необязательно)",
-        group_ph: "Напр. 201-С", books: "📚 Книги из библиотеки (можно несколько)",
-        books_hint: "Выбери книги — презентация будет строго по ним.", nobooks: "В библиотеке пока нет книг.",
+        group_ph: "Напр. 201-С", pick_books: "📚 Выбрать книги из библиотеки",
+        subject: "Предмет", subject_pick: "— выберите предмет —",
         books_pro: "Выбор книг для презентации доступен в Pro+.", create: "Создать презентацию",
         deliver: "Готовый файл придёт в чат с ботом (это займёт немного времени).",
-        need_topic: "Напишите тему", sending: "Отправляю…",
+        need_topic: "Напишите тему", sending: "Отправляю…", done: "Готово", change: "Изменить",
+        chosen: "Выбрано книг", pick_subject_first: "Сначала выберите предмет", nobooks: "В этом предмете пока нет книг.",
         queued: "⏳ Генерирую! Файл придёт в чат с ботом." },
   uz: { title: "Taqdimot", topic: "Mavzu", topic_ph: "Masalan: Yurak anatomiyasi",
         lang: "Taqdimot tili", slides: "Nechta slayd (20 gacha)", group: "Guruh (ixtiyoriy)",
-        group_ph: "Masalan 201-S", books: "📚 Kutubxona kitoblari (bir nechta mumkin)",
-        books_hint: "Kitoblarni tanla — taqdimot aynan ular asosida bo'ladi.", nobooks: "Kutubxonada hali kitob yo'q.",
+        group_ph: "Masalan 201-S", pick_books: "📚 Kutubxonadan kitob tanlash",
+        subject: "Fan", subject_pick: "— fanni tanlang —",
         books_pro: "Kitob tanlash Pro+ da mavjud.", create: "Taqdimot yaratish",
         deliver: "Tayyor fayl bot chatiga keladi (biroz vaqt oladi).",
-        need_topic: "Mavzuni yozing", sending: "Yuborilmoqda…",
+        need_topic: "Mavzuni yozing", sending: "Yuborilmoqda…", done: "Tayyor", change: "O'zgartirish",
+        chosen: "Tanlangan kitoblar", pick_subject_first: "Avval fanni tanlang", nobooks: "Bu fanda hali kitob yo'q.",
         queued: "⏳ Yaratyapman! Fayl bot chatiga keladi." },
   en: { title: "Presentation", topic: "Topic", topic_ph: "E.g. Heart anatomy",
         lang: "Presentation language", slides: "Number of slides (up to 20)", group: "Group (optional)",
-        group_ph: "E.g. 201-C", books: "📚 Library books (you can pick several)",
-        books_hint: "Pick books — the presentation will be strictly from them.", nobooks: "No books in the library yet.",
+        group_ph: "E.g. 201-C", pick_books: "📚 Pick library books",
+        subject: "Subject", subject_pick: "— choose a subject —",
         books_pro: "Choosing books is available in Pro+.", create: "Create presentation",
         deliver: "The file will arrive in the bot chat (takes a little time).",
-        need_topic: "Type the topic", sending: "Sending…",
+        need_topic: "Type the topic", sending: "Sending…", done: "Done", change: "Edit",
+        chosen: "Books selected", pick_subject_first: "Choose a subject first", nobooks: "No books in this subject yet.",
         queued: "⏳ Generating! The file will arrive in the bot chat." },
 };
 
@@ -2024,15 +2027,14 @@ async function presentationStudioScreen() {
   try { ME = await api("/api/me"); } catch (e) {}
   const P = PRESF[LANG] || PRESF.ru;
   const proplus = !!(ME.is_pro_plus || ME.is_admin);
-  let books = [];
-  if (proplus) { try { books = await api("/api/library/docs"); } catch (e) {} }
-  const booksUI = proplus
-    ? `<label>${P.books}</label>
-       <div class="booksel">${books.length
-          ? books.map(b => `<label class="bchk"><input type="checkbox" value="${b.id}"> <span class="grow">${esc(b.title)}</span><span class="muted small">${esc(b.subject || "")}</span></label>`).join("")
-          : `<p class="muted small">${P.nobooks}</p>`}</div>
-       <p class="muted small">${P.books_hint}</p>`
-    : `<div class="card muted small" style="margin:8px 0">🔒 ${P.books_pro}</div>`;
+  let allBooks = [], subjects = [];
+  if (proplus) {
+    try { allBooks = await api("/api/library/docs"); } catch (e) {}
+    try { subjects = (await api("/api/library/subjects")).filter(s => s.docs > 0); } catch (e) {}
+  }
+  // состояние выбора книг: open — открыт ли выбор, subject — выбранный предмет, picked — {id: название}
+  const bk = { open: false, subject: "", picked: {} };
+
   render(`
     ${langBar()}
     <h1>🖥 ${P.title}</h1>
@@ -2045,7 +2047,7 @@ async function presentationStudioScreen() {
       <input id="pslides" type="number" min="1" max="20" value="10">
       <label>${P.group}</label>
       <input id="pgroup" placeholder="${P.group_ph}">
-      ${booksUI}
+      <div id="bookblock" style="margin-top:8px"></div>
       <button class="btn" id="pcreate">✨ ${P.create}</button>
       <p class="muted small">${P.deliver}</p>
     </div>
@@ -2054,12 +2056,57 @@ async function presentationStudioScreen() {
   let plang = LANG;
   onAll(".lbtn", "click", el => { plang = el.dataset.l; $app.querySelectorAll(".lbtn").forEach(x => x.classList.toggle("on", x === el)); });
   on("#pback", "click", () => back());
+
+  function renderBooks() {
+    const el = document.getElementById("bookblock");
+    if (!el) return;
+    if (!proplus) { el.innerHTML = `<div class="card muted small">🔒 ${P.books_pro}</div>`; return; }
+    const ids = Object.keys(bk.picked);
+    if (!bk.open) {  // свёрнуто: либо сводка выбранного, либо кнопка «Выбрать книги»
+      el.innerHTML = ids.length
+        ? `<div class="booksum"><span class="grow">📚 ${P.chosen}: <b>${ids.length}</b> — ${ids.map(id => esc(bk.picked[id])).join(", ")}</span><button class="link" id="bkedit">${P.change}</button></div>`
+        : `<button class="btn secondary" id="bkopen">${P.pick_books}</button>`;
+      on("#bkedit", "click", () => { bk.open = true; renderBooks(); });
+      on("#bkopen", "click", () => { bk.open = true; renderBooks(); });
+      return;
+    }
+    // раскрыто: сначала предмет, затем книги этого предмета
+    el.innerHTML = `
+      <label>${P.subject}</label>
+      <select id="bksubj">
+        <option value="">${P.subject_pick}</option>
+        ${subjects.map(s => `<option value="${s.id}" ${String(s.id) === bk.subject ? "selected" : ""}>${esc(s.name)} (${s.docs})</option>`).join("")}
+      </select>
+      <div id="bklist" class="booksel" style="margin-top:6px"></div>
+      <button class="btn" id="bkdone">✓ ${P.done} (${ids.length})</button>`;
+    on("#bksubj", "change", e => { bk.subject = e.target.value; renderBookList(); });
+    on("#bkdone", "click", () => { bk.open = false; renderBooks(); });
+    renderBookList();
+  }
+  function renderBookList() {
+    const list = document.getElementById("bklist");
+    if (!list) return;
+    if (!bk.subject) { list.innerHTML = `<p class="muted small">${P.pick_subject_first}</p>`; return; }
+    const items = allBooks.filter(b => String(b.subject_id) === bk.subject);
+    list.innerHTML = items.length
+      ? items.map(b => `<label class="bchk"><input type="checkbox" value="${b.id}" ${bk.picked[b.id] ? "checked" : ""}><span class="grow">${esc(b.title)}</span></label>`).join("")
+      : `<p class="muted small">${P.nobooks}</p>`;
+    list.querySelectorAll("input").forEach(inp => inp.addEventListener("change", () => {
+      const book = allBooks.find(b => String(b.id) === inp.value);
+      if (inp.checked) bk.picked[inp.value] = (book && book.title) || inp.value;
+      else delete bk.picked[inp.value];
+      const d = document.getElementById("bkdone");
+      if (d) d.textContent = `✓ ${P.done} (${Object.keys(bk.picked).length})`;
+    }));
+  }
+  renderBooks();
+
   on("#pcreate", "click", async (e) => {
     const topic = document.getElementById("ptopic").value.trim();
     if (!topic) { toast(P.need_topic); return; }
     const slides = +document.getElementById("pslides").value || 10;
     const group = document.getElementById("pgroup").value.trim();
-    const book_ids = proplus ? [...$app.querySelectorAll(".booksel input:checked")].map(x => +x.value) : [];
+    const book_ids = Object.keys(bk.picked).map(Number);
     const b = e.currentTarget, old = b.textContent;
     b.disabled = true; b.textContent = P.sending;
     try {

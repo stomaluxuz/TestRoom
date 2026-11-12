@@ -185,3 +185,7 @@ body.testing .credit { display: none; }
 .bchk { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--bg2); }
 .bchk:last-child { border-bottom: 0; }
 .bchk input { width: auto; margin: 0; flex-shrink: 0; }
+.booksum { display: flex; align-items: center; gap: 8px; background: var(--bg2); border-radius: 10px;
+  padding: 10px 12px; font-size: 14px; }
+#bksubj { width: 100%; padding: 11px; border-radius: 10px; border: 1px solid var(--bg2);
+  background: var(--bg); color: var(--text); font-size: 15px; }
