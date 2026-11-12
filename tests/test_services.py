@@ -518,6 +518,11 @@ async def test_topup_flow(db):
     t3 = await svc.create_topup(db, u.id, 25000)
     _, user = await svc.decide_topup(db, t3.id, True, ADMIN_ID)
     assert user.balance == 25000
+    # «своя сумма»: студент выбрал 10000, но прислал 5000 — зачисляем фактические 5000
+    t4 = await svc.create_topup(db, u.id, 10000)
+    top, user = await svc.decide_topup(db, t4.id, True, ADMIN_ID, amount=5000)
+    assert top.amount == 5000            # в заявке записана фактическая сумма
+    assert user.balance == 30000         # 25000 + 5000, а не + 10000
 
 
 async def test_settings_get_set(db):

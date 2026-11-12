@@ -135,6 +135,10 @@ class Pay(StatesGroup):
     receipt = State()  # ждём скриншот чека после «Я оплатил»
 
 
+class AdminPay(StatesGroup):
+    amount = State()  # админ вводит точную сумму зачисления («своя сумма»)
+
+
 def _money(n: int) -> str:
     """Сумма в сумах с разделителями: 25000 → «25 000 сум»."""
     return f"{int(n or 0):,}".replace(",", " ") + " сум"
@@ -955,10 +959,14 @@ async def _submit_topup(reply_to: Message, bot: Bot, from_user, amount: int, pho
         topup = await svc.create_topup(db, user.id, amount)
         tid, uname = topup.id, user.full_name or "—"
     await reply_to.answer(L("b_submitted", ui))
-    kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"tpok:{tid}"),
-        InlineKeyboardButton(text="❌ Отклонить", callback_data=f"tpno:{tid}"),
-    ]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"tpok:{tid}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"tpno:{tid}"),
+        ],
+        # если студент прислал не ту сумму — зачислить вручную точную сумму
+        [InlineKeyboardButton(text="✏️ Своя сумма", callback_data=f"tpsum:{tid}")],
+    ])
     uref = f"@{from_user.username}" if from_user.username else "—"
     caption = (
         f"💳 <b>Пополнение #{tid}</b>\n"
@@ -1025,6 +1033,61 @@ async def topup_decide_cb(cb: CallbackQuery, bot: Bot):
     except Exception:
         pass
     await cb.answer("Готово")
+
+
+@router.callback_query(F.data.regexp(r"^tpsum:\d+$"))
+async def topup_custom_start(cb: CallbackQuery, state: FSMContext):
+    """Админ: ввести ТОЧНУЮ сумму зачисления (если пришло не то, что выбрал студент)."""
+    if not is_admin(cb.from_user.id):
+        return await cb.answer("Только для админа", show_alert=True)
+    tid = int(cb.data.split(":")[1])
+    await state.set_state(AdminPay.amount)
+    await state.update_data(
+        tid=tid, chat_id=cb.message.chat.id, msg_id=cb.message.message_id,
+        is_photo=bool(cb.message.photo), base=cb.message.html_text or "",
+    )
+    await cb.message.answer("✏️ Введите ТОЧНУЮ сумму зачисления (сколько реально пришло), в сумах:")
+    await cb.answer()
+
+
+@router.message(AdminPay.amount, F.text)
+async def topup_custom_amount(message: Message, state: FSMContext, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return await state.clear()
+    data = await state.get_data()
+    digits = "".join(ch for ch in message.text if ch.isdigit())
+    if not digits:
+        return await message.answer("Напишите число, например 5000.")
+    amount = int(digits)
+    if amount <= 0:
+        return await message.answer("Сумма должна быть больше нуля.")
+    tid = data.get("tid")
+    await state.clear()
+    async with dbmod.SessionLocal() as db:
+        try:
+            topup, user = await svc.decide_topup(db, tid, True, message.from_user.id, amount=amount)
+        except svc.ServiceError as e:
+            return await message.answer("❌ " + e.message)
+        svc.add_admin_log(
+            db, message.from_user.id, topup.user_id, f"зачислил пополнение {topup.amount} сум (своя сумма)"
+        )
+        await db.commit()
+        uid, credited, bal = topup.user_id, topup.amount, (user.balance if user else 0)
+    # помечаем исходную заявку как обработанную (и убираем кнопки)
+    verdict = f"✅ Зачислено {_money(credited)} (вручную) · {escape(message.from_user.full_name)}"
+    try:
+        base = data.get("base") or ""
+        if data.get("is_photo"):
+            await bot.edit_message_caption(chat_id=data["chat_id"], message_id=data["msg_id"], caption=f"{base}\n\n{verdict}")
+        else:
+            await bot.edit_message_text(chat_id=data["chat_id"], message_id=data["msg_id"], text=f"{base}\n\n{verdict}")
+    except Exception:
+        pass
+    try:
+        await bot.send_message(uid, f"✅ Баланс пополнен на {_money(credited)}. Текущий баланс: {_money(bal)}.")
+    except Exception:
+        pass
+    await message.answer(f"✅ Зачислено {_money(credited)} студенту.")
 
 
 @router.message(Command("name"))

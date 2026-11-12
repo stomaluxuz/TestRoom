@@ -441,9 +441,12 @@ async def admin_topups(db: AsyncSession, status: str = "pending", limit: int = 1
     ]
 
 
-async def decide_topup(db: AsyncSession, topup_id: int, approve: bool, admin_id: int) -> tuple[TopUp, User | None]:
+async def decide_topup(
+    db: AsyncSession, topup_id: int, approve: bool, admin_id: int, amount: int | None = None
+) -> tuple[TopUp, User | None]:
     """Подтвердить/отклонить пополнение. При подтверждении зачисляет сумму на баланс.
-    Повторная обработка той же заявки запрещена (защита от двойного зачисления)."""
+    amount — ТОЧНАЯ сумма зачисления (если студент прислал не ту сумму, что выбрал кнопкой):
+    заменяет заявленную и записывается в заявку. Повторная обработка заявки запрещена."""
     t = await db.get(TopUp, topup_id)
     if t is None:
         raise ServiceError("Заявка не найдена.", 404)
@@ -454,7 +457,9 @@ async def decide_topup(db: AsyncSession, topup_id: int, approve: bool, admin_id:
     t.decided_by = admin_id
     user = await db.get(User, t.user_id)
     if approve and user is not None:
-        user.balance = (user.balance or 0) + t.amount
+        credit = amount if (amount is not None and amount > 0) else t.amount
+        t.amount = credit  # фиксируем фактически зачисленную сумму
+        user.balance = (user.balance or 0) + credit
     await db.commit()
     return t, user
 
