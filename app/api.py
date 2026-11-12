@@ -231,6 +231,7 @@ class BlockIn(BaseModel):
 class SettingsIn(BaseModel):
     price_presentation: int | None = Field(None, ge=0, le=100_000_000)
     price_test: int | None = Field(None, ge=0, le=100_000_000)
+    price_referat: int | None = Field(None, ge=0, le=100_000_000)
     card_number: str | None = None
     card_holder: str | None = None
     topup_amounts: str | None = None

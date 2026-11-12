@@ -1772,6 +1772,8 @@ async function paymentsTab(body) {
       <input id="pp" type="number" min="0" value="${cfg.price_presentation}">
       <label>Цена теста (сум)</label>
       <input id="pt" type="number" min="0" value="${cfg.price_test}">
+      <label>Цена реферата (сум)</label>
+      <input id="pr" type="number" min="0" value="${cfg.price_referat ?? 5000}">
       <label>Номер карты</label>
       <input id="card" value="${esc(cfg.card_number)}">
       <label>Владелец карты</label>
@@ -1799,6 +1801,7 @@ async function paymentsTab(body) {
     const payload = {
       price_presentation: +document.getElementById("pp").value || 0,
       price_test: +document.getElementById("pt").value || 0,
+      price_referat: +document.getElementById("pr").value || 0,
       card_number: document.getElementById("card").value.trim(),
       card_holder: document.getElementById("holder").value.trim(),
       topup_amounts: document.getElementById("amts").value.trim(),
