@@ -35,6 +35,9 @@ BTN = {
     "topup": {
         "ru": "💳 Пополнить баланс", "uz": "💳 Balansni to'ldirish", "en": "💳 Top up balance",
     },
+    "referat": {
+        "ru": "📄 Создать реферат", "uz": "📄 Referat yaratish", "en": "📄 Create essay",
+    },
 }
 # Множества всех переводов каждой кнопки — для F.text.in_(...), чтобы ловить на любом языке.
 BTN_ALL = {name: frozenset(v.values()) for name, v in BTN.items()}
@@ -408,6 +411,32 @@ _T = {
               "Balansni «💰 Balansim» tugmasi orqali ko'ring.",
         "en": "✅ Request sent! An admin will verify the payment and credit your balance — usually quickly. "
               "Check your balance via “💰 My balance”.",
+    },
+    # ---- Создание реферата ----
+    "rf_topic_prompt": {
+        "ru": "📄 Напишите <b>тему реферата</b> (например: «Профилактика кариеса»).",
+        "uz": "📄 <b>Referat mavzusini</b> yozing (masalan: «Karies profilaktikasi»).",
+        "en": "📄 Type the <b>essay topic</b> (e.g. “Caries prevention”).",
+    },
+    "rf_lang_q": {
+        "ru": "На каком <b>языке</b> написать реферат?",
+        "uz": "Referatni qaysi <b>tilda</b> yozay?",
+        "en": "In which <b>language</b> should I write the essay?",
+    },
+    "rf_generating": {
+        "ru": "⏳ Пишу реферат — это займёт немного времени…",
+        "uz": "⏳ Referat yozyapman — bir oz vaqt oladi…",
+        "en": "⏳ Writing the essay — this takes a little time…",
+    },
+    "rf_result_caption": {
+        "ru": "📄 Готовый реферат ✅ Тема: {topic}.{paid} Откройте в Word.",
+        "uz": "📄 Tayyor referat ✅ Mavzu: {topic}.{paid} Word'da oching.",
+        "en": "📄 Essay ready ✅ Topic: {topic}.{paid} Open in Word.",
+    },
+    "rf_fail": {
+        "ru": "❌ Не получилось написать реферат, попробуйте другую тему.",
+        "uz": "❌ Referat yozib bo'lmadi, boshqa mavzuni sinab ko'ring.",
+        "en": "❌ Couldn't write the essay, try another topic.",
     },
     "b_receipt_need_photo": {
         "ru": "📸 Нужен именно <b>фото-скриншот чека</b> об оплате — пришлите его. "

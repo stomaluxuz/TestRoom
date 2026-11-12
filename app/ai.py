@@ -166,7 +166,7 @@ def _err(msg: str, status: int = 400):
     return ServiceError(msg, status)
 
 
-async def _ask(system: str, prompt: str, max_tokens: int = 4000) -> str:
+async def _ask(system: str, prompt: str, max_tokens: int = 4000, effort: str = "low") -> str:
     if not settings.anthropic_api_key:
         raise _err(
             "ИИ пока не подключён. Добавьте ANTHROPIC_API_KEY в файл .env, чтобы пользоваться режимом «по теме».",
@@ -177,7 +177,7 @@ async def _ask(system: str, prompt: str, max_tokens: int = 4000) -> str:
         msg = await client.messages.create(
             model=settings.anthropic_model,
             max_tokens=max_tokens,
-            output_config={"effort": "low"},  # простая задача — экономим токены
+            output_config={"effort": effort},  # low — экономим; medium/high — глубже (напр. реферат)
             system=system,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -608,3 +608,36 @@ async def generate_test_questions(
     except Exception:
         pass
     return collected
+
+
+SYSTEM_REFERAT = (
+    "Ты — академический помощник. Пишешь РЕФЕРАТ (учебную работу) по заданной теме: грамотно, "
+    "содержательно, в научном стиле, без «воды». Структура и формат ответа СТРОГО такие:\n"
+    "- каждый раздел начинается со строки «# Заголовок раздела» (решётка, пробел, заголовок);\n"
+    "- под заголовком — связный текст в НЕСКОЛЬКО абзацев (не список-огрызок);\n"
+    "- порядок разделов: сначала ВВЕДЕНИЕ, затем 3–5 содержательных разделов по сути темы, "
+    "затем ЗАКЛЮЧЕНИЕ, в конце — раздел со СПИСКОМ ЛИТЕРАТУРЫ (4–6 источников, каждый с новой "
+    "строки, можно с «-»);\n"
+    "- заголовки «Введение», «Заключение», «Список литературы» пиши на нужном языке;\n"
+    "- без markdown-разметки внутри текста (без **, без таблиц), только абзацы;\n"
+    "- НЕ придумывай точные страницы/цитаты из несуществующих книг; источники — реалистичные, "
+    "общего вида.\n"
+    "Пиши развёрнуто и по делу — это полноценная учебная работа, а не план."
+)
+
+
+async def generate_referat(topic: str, lang: str = "ru", context: str = "") -> str:
+    """Генерирует текст реферата (разделы через «# Заголовок»). context — выдержки из
+    библиотеки (RAG), если есть: опираться на них как на основной источник."""
+    topic = " ".join((topic or "").split())
+    if not topic:
+        raise _err("Напишите тему реферата.")
+    ctx = _context_block(context) if context else ""
+    prompt = (
+        f"{ctx}"
+        f"Напиши полноценный РЕФЕРАТ на тему: «{topic}». Соблюдай структуру из системной инструкции "
+        f"(Введение → 3–5 разделов → Заключение → Список литературы). Пиши академически и развёрнуто.\n"
+        f"{_lang_instr(lang)}"
+    )
+    # effort=medium — реферат требует глубины (не «low», как для простых задач)
+    return await _ask(SYSTEM_REFERAT, prompt, max_tokens=8000, effort="medium")

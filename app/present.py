@@ -348,6 +348,82 @@ def build_test_docx(title: str, questions: list[dict]) -> tuple[str, bytes]:
     return f"{safe[:50]}.docx", buf.getvalue()
 
 
+_REFERAT_LABELS = {
+    "ru": {"referat": "РЕФЕРАТ", "author": "Выполнил(а)", "plan": "СОДЕРЖАНИЕ"},
+    "uz": {"referat": "REFERAT", "author": "Bajardi", "plan": "MUNDARIJA"},
+    "en": {"referat": "ESSAY", "author": "Prepared by", "plan": "CONTENTS"},
+}
+
+
+def _parse_sections(text: str) -> list[tuple[str, str]]:
+    """Разбор текста на разделы по строкам «# Заголовок». Возвращает [(заголовок, тело)]."""
+    sections: list[tuple[str, str]] = []
+    cur_title, cur_body = None, []
+    for line in (text or "").split("\n"):
+        s = line.strip()
+        if s.startswith("#"):
+            if cur_title is not None:
+                sections.append((cur_title, "\n".join(cur_body).strip()))
+            cur_title = s.lstrip("#").strip()
+            cur_body = []
+        elif cur_title is not None:
+            cur_body.append(line)
+    if cur_title is not None:
+        sections.append((cur_title, "\n".join(cur_body).strip()))
+    return [(t, b) for t, b in sections if t]
+
+
+def build_referat_docx(topic: str, author: str, lang: str, text: str) -> tuple[str, bytes]:
+    """Собирает РЕФЕРАТ в Word: титульный лист, содержание (план), разделы. Разделы берутся
+    из текста по строкам «# Заголовок» (их пишет ИИ на нужном языке)."""
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+
+    lab = _REFERAT_LABELS.get(lang, _REFERAT_LABELS["ru"])
+    sections = _parse_sections(text)
+    doc = Document()
+
+    # --- титульный лист ---
+    for _ in range(4):
+        doc.add_paragraph()
+    p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(lab["referat"]); r.bold = True; r.font.size = Pt(28)
+    doc.add_paragraph()
+    p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(topic or ""); r.bold = True; r.font.size = Pt(18)
+    for _ in range(6):
+        doc.add_paragraph()
+    if author:
+        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        p.add_run(f"{lab['author']}: {author}")
+    doc.add_page_break()
+
+    # --- содержание (план) ---
+    if sections:
+        doc.add_heading(lab["plan"], level=1)
+        for i, (t, _b) in enumerate(sections, 1):
+            doc.add_paragraph(f"{i}. {t}")
+        doc.add_page_break()
+
+    # --- разделы ---
+    if sections:
+        for t, body in sections:
+            doc.add_heading(t, level=1)
+            for para in body.split("\n"):
+                if para.strip():
+                    doc.add_paragraph(para.strip())
+    else:  # ИИ не разметил заголовки — кладём текст как есть под темой
+        doc.add_heading(topic or "Referat", level=1)
+        for para in (text or "").split("\n"):
+            if para.strip():
+                doc.add_paragraph(para.strip())
+
+    buf = io.BytesIO(); doc.save(buf)
+    safe = "".join(ch for ch in (topic or "referat") if ch.isalnum() or ch in " -_").strip() or "referat"
+    return f"{safe[:50]}.docx", buf.getvalue()
+
+
 def build_doc_docx(title: str, text: str) -> tuple[str, bytes]:
     """Оформляет произвольный текст (статья/реферат/конспект) в Word (.docx)."""
     from docx import Document

@@ -146,6 +146,38 @@ async def test_test_generation_refunds_on_crash(bot_dp, monkeypatch):
     assert "не удалось" in last or "не списаны" in last
 
 
+async def test_referat_flow(bot_dp, monkeypatch):
+    """Студент: кнопка «Реферат» → тема → язык → .docx приходит, баланс списан."""
+    from aiogram.methods import SendDocument
+
+    from app.bottexts import btn
+    from app.config import settings
+
+    settings.anthropic_api_key = "x"
+    bot, dp, s = bot_dp
+    T = 9191
+    await dp.feed_update(bot, msg(T, "/start"))
+    await dp.feed_update(bot, cb(T, "setlang:ru"))
+    await dp.feed_update(bot, msg(T, "Иванов Иван"))
+    await dp.feed_update(bot, cb(T, "role:student"))
+    async with dbmod.SessionLocal() as db:
+        u = await svc.get_or_create_user(db, T)
+        u.balance = 100000  # цена реферата по умолчанию 5000
+        await db.commit()
+
+    async def fake_ref(topic, lang="ru", context=""):
+        return "# Введение\nТекст введения.\n\n# Заключение\nИтог.\n\n# Список литературы\n- Источник 1"
+
+    monkeypatch.setattr("app.bot.generate_referat", fake_ref)
+    await dp.feed_update(bot, msg(T, btn("referat", "ru")))
+    assert "тему реферата" in s.texts(T)[-1].lower()
+    await dp.feed_update(bot, msg(T, "Профилактика кариеса"))
+    assert "язык" in s.texts(T)[-1].lower()
+    await dp.feed_update(bot, cb(T, "rflang:ru"))
+    assert any(isinstance(m, SendDocument) for m in s.calls)  # реферат-файл отправлен
+    assert (await get_user(T)).balance == 95000               # списано 5000
+
+
 async def test_registration_role_and_upload(bot_dp):
     bot, dp, s = bot_dp
     T = 555

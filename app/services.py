@@ -323,6 +323,7 @@ async def release_presentation(db: AsyncSession, user: User):
 DEFAULT_SETTINGS: dict[str, str] = {
     "price_presentation": "5000",
     "price_test": "5000",
+    "price_referat": "5000",
     "card_number": "9860167802934742",
     "card_holder": "ABDULBOSIT ABDURAZOKOV",
     "topup_amounts": "10000,25000,50000",

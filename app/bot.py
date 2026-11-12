@@ -41,8 +41,10 @@ from .parsers import (
     template_docx,
     template_xlsx,
 )
-from .ai import generate_slides, generate_test_questions
-from .present import PRESENT_EXAMPLE, build_presentation, build_pptx, build_test_docx
+from .ai import generate_referat, generate_slides, generate_test_questions
+from .present import (
+    PRESENT_EXAMPLE, build_presentation, build_pptx, build_referat_docx, build_test_docx,
+)
 from .universities import UNIVERSITIES
 from . import limits
 from .bottexts import BTN_ALL, btn, t as L
@@ -124,6 +126,11 @@ class MakePres(StatesGroup):
     count = State()
 
 
+class MakeReferat(StatesGroup):
+    topic = State()
+    lang = State()  # выбор языка реферата
+
+
 class Pay(StatesGroup):
     receipt = State()  # ждём скриншот чека после «Я оплатил»
 
@@ -151,6 +158,8 @@ def main_reply_kb(user: User) -> ReplyKeyboardMarkup:
     lang = getattr(user, "lang", None) or "ru"
     rows = [[KeyboardButton(text=btn("pres", lang)), KeyboardButton(text=btn("test", lang))]]
     if not user.is_teacher and user.id not in settings.admin_ids:
+        # услуга «Реферат» — для студентов (не преподавателей)
+        rows.append([KeyboardButton(text=btn("referat", lang))])
         rows.append([KeyboardButton(text=btn("balance", lang)), KeyboardButton(text=btn("topup", lang))])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True)
 
@@ -753,6 +762,80 @@ async def make_pres_count(message: Message, state: FSMContext):
         ),
     )
     await _sweep(message.bot, message.chat.id)  # убираем служебную переписку, файл остаётся
+
+
+# ---------------------------------------------------------------- реферат (для студентов)
+
+@router.message(F.text.in_(BTN_ALL["referat"]))
+@router.message(Command("referat"))
+async def make_referat_start(message: Message, state: FSMContext):
+    if not await _ai_gate(message, state):
+        return
+    async with dbmod.SessionLocal() as db:
+        user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
+        price = 0 if svc.is_free_user(user) else await svc.get_price(db, "referat")
+    ui = getattr(user, "lang", None) or "ru"
+    _remember(message.chat.id, message.message_id)
+    await state.set_state(MakeReferat.topic)
+    await state.update_data(ui_lang=ui)
+    hint = L("price_hint", ui).format(amount=_money(price)) if price else ""
+    await _say(message, L("rf_topic_prompt", ui) + hint)
+
+
+@router.message(MakeReferat.topic, F.text)
+async def make_referat_topic(message: Message, state: FSMContext):
+    _remember(message.chat.id, message.message_id)
+    ui = (await state.get_data()).get("ui_lang", "ru")
+    await state.update_data(topic=message.text.strip())
+    await state.set_state(MakeReferat.lang)
+    await _say(message, L("rf_lang_q", ui), reply_markup=lang_kb("rflang"))
+
+
+@router.callback_query(MakeReferat.lang, F.data.regexp(r"^rflang:(ru|uz|en)$"))
+async def make_referat_build(cb: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    ui = data.get("ui_lang", "ru")
+    lang = cb.data.split(":")[1]
+    topic = data.get("topic", "")
+    await state.clear()
+    async with dbmod.SessionLocal() as db:
+        user = await svc.get_or_create_user(db, cb.from_user.id, cb.from_user.username)
+        fio = user.full_name or ""
+        try:
+            charged = await svc.charge_feature(db, user, "referat")  # 0 для преподавателей/админа
+        except svc.ServiceError as e:
+            await cb.answer()
+            return await cb.message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb(ui))
+    await cb.answer()
+    note = L("queue_note", ui) if limits.queued() else ""
+    wait = await _say(cb.message, L("rf_generating", ui) + note)
+    try:
+        async with limits.gen_slot():
+            async with dbmod.SessionLocal() as db, limits.timing("rag"):
+                ctx = await svc.library_context(db, topic)
+            async with limits.timing("text"):
+                body = await generate_referat(topic, lang=lang, context=ctx["context"])
+            name, blob = await asyncio.to_thread(build_referat_docx, topic, fio, lang, body)
+    except Exception as e:
+        is_svc = isinstance(e, svc.ServiceError)
+        if not is_svc:
+            log.exception("Сбой генерации реферата")
+        await _refund(cb.from_user, charged)
+        try:
+            await wait.delete()
+        except Exception:
+            pass
+        return await cb.message.answer(("❌ " + escape(e.message)) if is_svc else L("rf_fail", ui))
+    try:
+        await wait.delete()
+    except Exception:
+        pass
+    paid = L("paid_note", ui).format(amount=_money(charged)) if charged else ""
+    await cb.message.answer_document(
+        BufferedInputFile(blob, name),
+        caption=L("rf_result_caption", ui).format(topic=escape(topic), paid=paid),
+    )
+    await _sweep(cb.message.bot, cb.message.chat.id)
 
 
 # ---------------------------------------------------------------- баланс и пополнение (студенты)
@@ -1755,6 +1838,7 @@ async def setup_bot(bot: Bot):
             BotCommand(command="name", description="Изменить ФИО"),
             BotCommand(command="template", description="Шаблоны файлов для тестов"),
             BotCommand(command="present", description="Сделать презентацию"),
+            BotCommand(command="referat", description="Создать реферат"),
             BotCommand(command="balance", description="Баланс и пополнение"),
             BotCommand(command="language", description="🌐 Til / Язык / Language"),
             BotCommand(command="help", description="Помощь"),
