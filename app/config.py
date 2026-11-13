@@ -117,8 +117,8 @@ class Settings:
     # Сколько запусков теста (для группы) в день на бесплатном тарифе. 0 — без ограничения.
     free_max_sessions_per_day: int = field(default_factory=lambda: int(os.getenv("FREE_MAX_SESSIONS_PER_DAY", "1")))
     free_max_students: int = field(default_factory=lambda: int(os.getenv("FREE_MAX_STUDENTS", "30")))
-    # Сколько презентаций в день можно создать (0 — без ограничения). Временно 1.
-    free_max_pres_per_day: int = field(default_factory=lambda: int(os.getenv("FREE_MAX_PRES_PER_DAY", "1")))
+    # Сколько презентаций в НЕДЕЛЮ можно создать бесплатному преподавателю (0 — без ограничения).
+    free_max_pres_per_week: int = field(default_factory=lambda: int(os.getenv("FREE_MAX_PRES_PER_WEEK", "1")))
     # Часовой пояс для границы «дня» (Узбекистан = UTC+5).
     tz_offset_hours: int = field(default_factory=lambda: int(os.getenv("TZ_OFFSET_HOURS", "5")))
 

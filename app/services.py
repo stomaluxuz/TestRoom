@@ -281,9 +281,40 @@ def _local_today():
     return (utcnow() + timedelta(hours=settings.tz_offset_hours)).date()
 
 
+async def _check_weekly_pres_limit(db: AsyncSession, user: User):
+    """Бесплатный преподаватель: не больше N презентаций за последние 7 дней.
+    Студенты платят за каждую — для них лимита нет; Pro/Pro+/админ — без ограничений."""
+    if user.id in settings.admin_ids or user.is_pro or user.is_pro_plus:
+        return
+    if not user.is_teacher:
+        return  # студенты платят с баланса — недельного лимита нет
+    limit = settings.free_max_pres_per_week
+    if limit <= 0:
+        return
+    window_start = utcnow() - timedelta(days=7)
+    made = (await db.scalars(
+        select(PresentationEvent.created_at)
+        .where(PresentationEvent.user_id == user.id, PresentationEvent.created_at >= window_start)
+        .order_by(PresentationEvent.created_at)
+    )).all()
+    if len(made) < limit:
+        return
+    # следующий слот откроется, когда самая старая презентация в окне выйдет из 7 дней
+    nxt = made[0] + timedelta(days=7)
+    days_left = max(1, (nxt - utcnow()).days + 1)
+    raise ServiceError(
+        f"Лимит бесплатной версии исчерпан — не больше {limit} презентаций в неделю. "
+        f"Следующую можно будет создать примерно через {days_left} дн. "
+        "Подключите Pro, чтобы создавать презентации без ограничений.",
+        402,
+    )
+
+
 async def reserve_presentation(db: AsyncSession, user: User):
     """Счётчик презентаций (для статистики). Оплата/бесплатность решается отдельно
-    (см. charge_feature): преподаватели — бесплатно, студенты — списанием с баланса."""
+    (см. charge_feature): преподаватели — бесплатно, студенты — списанием с баланса.
+    Для бесплатных преподавателей действует недельный лимит."""
+    await _check_weekly_pres_limit(db, user)
     today = _local_today()
     if user.pres_date != today:
         user.pres_date = today

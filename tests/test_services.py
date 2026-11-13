@@ -470,6 +470,47 @@ async def test_presentation_counter_no_limit(db):
     assert u.pres_total == 3
 
 
+async def test_weekly_presentation_limit(db):
+    """Бесплатный преподаватель: не больше 1 презентации за 7 дней.
+    Pro/Pro+/админ — без лимита; студенты платят за каждую, их лимит не трогает."""
+    svc.settings.free_max_pres_per_week = 1
+
+    teacher = await make_teacher(db, 700, "Препод Бесплатный")
+    await svc.reserve_presentation(db, teacher)  # первая — ок
+    with pytest.raises(svc.ServiceError) as e:
+        await svc.reserve_presentation(db, teacher)  # вторая за неделю — запрет
+    assert e.value.status == 402 and "неделю" in e.value.message
+    assert teacher.pres_total == 1  # вторая не засчиталась
+
+    # старую презентацию «состарим» на 8 дней — слот снова открыт
+    from sqlalchemy import select
+    from app.models import PresentationEvent
+    ev = await db.scalar(select(PresentationEvent).where(PresentationEvent.user_id == teacher.id))
+    ev.created_at = utcnow() - timedelta(days=8)
+    await db.commit()
+    await svc.reserve_presentation(db, teacher)  # уже можно
+    assert teacher.pres_total == 2
+
+    # Pro-преподаватель — без ограничений
+    pro = await make_teacher(db, 701, "Препод Про")
+    await svc.give_pro(db, pro.id, 30)
+    for _ in range(3):
+        await svc.reserve_presentation(db, pro)
+    assert pro.pres_total == 3
+
+    # студент платит за каждую — недельный лимит его не касается
+    student = await make_student(db, 702)
+    for _ in range(3):
+        await svc.reserve_presentation(db, student)
+    assert student.pres_total == 3
+
+    # админ — без ограничений
+    admin = await svc.get_or_create_user(db, ADMIN_ID)
+    for _ in range(3):
+        await svc.reserve_presentation(db, admin)
+    assert admin.pres_total == 3
+
+
 async def test_charge_feature_student(db):
     u = await make_student(db, 13)
     u.balance = 12000

@@ -718,7 +718,11 @@ async def make_pres_count(message: Message, state: FSMContext):
             charged = await svc.charge_feature(db, user, "presentation")  # 0 для преподавателей
         except svc.ServiceError as e:
             return await message.answer("❌ " + escape(e.message), reply_markup=topup_inline_kb(ui))
-        await svc.reserve_presentation(db, user)
+        try:
+            await svc.reserve_presentation(db, user)  # недельный лимит для бесплатных преподавателей
+        except svc.ServiceError as e:
+            await svc.refund(db, user, charged)  # у препода charged=0, но на всякий случай вернём
+            return await message.answer("❌ " + escape(e.message))
     note = L("queue_note", ui) if limits.queued() else ""
     wait = await _say(message, L("p_generating", ui) + note)
     try:

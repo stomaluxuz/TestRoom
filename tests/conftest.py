@@ -20,7 +20,7 @@ async def fresh_db(tmp_path):
     settings.dev_auth = False
     settings.free_max_sessions_per_day = 1
     settings.free_max_students = 30
-    settings.free_max_pres_per_day = 1
+    settings.free_max_pres_per_week = 0  # по умолчанию без лимита в тестах; отдельный тест включает
     settings.tz_offset_hours = 5
     settings.anthropic_api_key = ""
     settings.voyage_api_key = ""  # RAG по умолчанию выключен в тестах (без сети)
