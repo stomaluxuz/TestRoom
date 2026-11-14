@@ -2179,7 +2179,7 @@ const QUIZ = {
     correct_word: "Верно!", wrong_word: "Мимо", no_answer: "Не успел(а)",
     results_title: "🏆 Итоги", your_place: "Твоё место", of_n: "из {n}", home_btn: "На главную",
     end_host: "Игра окончена", join_title: "Войти в куиз", join_hint: "Введи код игры от преподавателя",
-    join_btn: "Войти", score_word: "очков",
+    join_btn: "Войти", score_word: "очков", pick_avatar: "Выбери аватар",
   },
   uz: {
     host_entry: "🎮 Kuiz (Kahoot kabi)", join_entry: "🎮 Kuizga kirish",
@@ -2195,7 +2195,7 @@ const QUIZ = {
     correct_word: "To'g'ri!", wrong_word: "Xato", no_answer: "Ulgurmadingiz",
     results_title: "🏆 Natijalar", your_place: "Sizning o'rningiz", of_n: "{n} dan", home_btn: "Bosh sahifa",
     end_host: "O'yin tugadi", join_title: "Kuizga kirish", join_hint: "O'qituvchidan olgan kodni kiriting",
-    join_btn: "Kirish", score_word: "ball",
+    join_btn: "Kirish", score_word: "ball", pick_avatar: "Avatar tanlang",
   },
   en: {
     host_entry: "🎮 Quiz (Kahoot-style)", join_entry: "🎮 Join a quiz",
@@ -2211,11 +2211,14 @@ const QUIZ = {
     correct_word: "Correct!", wrong_word: "Wrong", no_answer: "No answer",
     results_title: "🏆 Results", your_place: "Your place", of_n: "of {n}", home_btn: "Home",
     end_host: "Game over", join_title: "Join a quiz", join_hint: "Enter the game PIN from your teacher",
-    join_btn: "Join", score_word: "pts",
+    join_btn: "Join", score_word: "pts", pick_avatar: "Pick your avatar",
   },
 };
 function quizT() { return QUIZ[LANG] || QUIZ.ru; }
 const QUIZ_SHAPE = ["▲", "◆", "●", "■", "★", "✚"];
+const QUIZ_AVATARS = ["😎", "🦊", "🐱", "🐼", "🐸", "🦁", "🐯", "🐵", "🐨", "🐰",
+  "🦄", "🐲", "🐙", "🦖", "🐬", "🦅", "🐝", "🌟", "🔥", "🚀",
+  "🎧", "⚽", "🎮", "🍕", "🦈", "🐧", "👑", "🤖"];
 
 function quizOptions(options, { correct = null, chosen = null, counts = null, tappable = false } = {}) {
   return `<div class="qopts">` + options.map((o, i) => {
@@ -2282,7 +2285,7 @@ async function quizHostScreen({ game_id }) {
         <div class="big-code">${d.pin.slice(0, 3)} ${d.pin.slice(3)}</div>
         <div class="stats"><div class="stat"><span class="muted small">${Q.joined}</span><b>${d.players}</b></div>
           <div class="stat"><span class="muted small">${Q.count_label}</span><b>${d.total}</b></div></div>
-        ${d.joined.length ? `<div class="chips">${d.joined.map(n => `<span class="chip">${esc(n)}</span>`).join("")}</div>`
+        ${d.joined.length ? `<div class="chips">${d.joined.map(p => `<span class="chip">${p.emoji || ""} ${esc(p.name)}</span>`).join("")}</div>`
           : `<div class="card muted" style="text-align:center">${Q.nobody}</div>`}
         <button class="btn" id="next" ${d.can_start ? "" : "disabled"}>${Q.start_btn}</button>
         <button class="btn danger" id="end">${Q.finish_btn}</button>`;
@@ -2303,13 +2306,13 @@ async function quizHostScreen({ game_id }) {
         ${quizOptions(d.question.options, { correct: d.correct, counts: d.counts })}
         <h2>${Q.leaderboard}</h2>
         ${d.leaderboard.map((p, i) => `<div class="lbrow"><span class="lbrank">${i + 1}</span>
-          <span class="grow ell">${esc(p.name)}</span>${p.delta ? `<span class="lbdelta">+${p.delta}</span>` : ""}
+          <span class="avm">${p.emoji || ""}</span><span class="grow ell">${esc(p.name)}</span>${p.delta ? `<span class="lbdelta">+${p.delta}</span>` : ""}
           <b>${p.score}</b></div>`).join("")}
         <button class="btn" id="next">${d.is_last ? Q.finish_btn : Q.next_btn}</button>`;
     } else { // ended
       html = quizPodiumHtml(d.podium, Q) +
         (d.leaderboard || []).slice(3).map((p, i) => `<div class="lbrow"><span class="lbrank">${i + 4}</span>
-          <span class="grow ell">${esc(p.name)}</span><b>${p.score}</b></div>`).join("") +
+          <span class="avm">${p.emoji || ""}</span><span class="grow ell">${esc(p.name)}</span><b>${p.score}</b></div>`).join("") +
         `<button class="btn" id="home">${Q.home_btn}</button>`;
     }
     $app.innerHTML = html;
@@ -2343,23 +2346,33 @@ async function quizHostScreen({ game_id }) {
 // ---- студент: вход по коду
 async function quizJoinScreen() {
   const Q = quizT();
+  let avatar = QUIZ_AVATARS[Math.floor(Math.random() * QUIZ_AVATARS.length)];
   render(`
     ${langBar()}
     <h1>${Q.join_title}</h1>
     <div class="card">
       <p class="muted small" style="margin:0 0 6px">${Q.join_hint}</p>
       <input id="qpin" class="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
+      <p class="muted small" style="margin:12px 0 6px">${Q.pick_avatar}</p>
+      <div class="avpick" id="avpick">
+        ${QUIZ_AVATARS.map(a => `<button class="av ${a === avatar ? "on" : ""}" data-a="${a}">${a}</button>`).join("")}
+      </div>
       <button class="btn" id="qjoin">${Q.join_btn}</button>
     </div>
   `);
   const pin = document.getElementById("qpin");
   pin.addEventListener("input", () => { pin.value = pin.value.replace(/\D/g, "").slice(0, 6); });
   pin.addEventListener("keydown", e => { if (e.key === "Enter") doJoin(); });
+  onAll("#avpick .av", "click", el => {
+    avatar = el.dataset.a;
+    $app.querySelectorAll("#avpick .av").forEach(b => b.classList.toggle("on", b === el));
+    haptic("success");
+  });
   on("#qjoin", "click", doJoin);
   async function doJoin() {
     if (pin.value.length !== 6) { toast(t("code_6")); return; }
     try {
-      const r = await api("/api/quiz/join", { json: { pin: pin.value } });
+      const r = await api("/api/quiz/join", { json: { pin: pin.value, emoji: avatar } });
       go(quizPlayScreen, { game_id: r.game_id, player_id: r.player_id }, true);
     } catch (e) { haptic("error"); toast(e.message); }
   }
@@ -2378,8 +2391,8 @@ async function quizPlayScreen({ game_id, player_id }) {
     sig = newSig;
     let html = "";
     if (d.phase === "lobby") {
-      html = `<div class="center"><div class="qbig">🎮</div><h1>${Q.you_in}</h1>
-        <p class="muted">${esc(d.name)}</p><div class="spin" style="margin:16px auto"></div>
+      html = `<div class="center"><div class="qbig">${d.emoji || "🎮"}</div><h1>${Q.you_in}</h1>
+        <p class="muted">${esc(d.name)}</p><div class="spin big" style="margin:16px auto"></div>
         <p class="muted small">${Q.waiting_host} · ${d.players} ${Q.players_word}</p></div>`;
     } else if (d.phase === "question") {
       const answered = d.answered;
@@ -2400,7 +2413,7 @@ async function quizPlayScreen({ game_id, player_id }) {
           <div class="stat"><span class="muted small">${Q.score_word}</span><b>${y.score}</b></div></div>
         <h2>${Q.leaderboard}</h2>
         ${d.leaderboard.map((p, i) => `<div class="lbrow ${p.name === d.name ? "me" : ""}"><span class="lbrank">${i + 1}</span>
-          <span class="grow ell">${esc(p.name)}</span><b>${p.score}</b></div>`).join("")}
+          <span class="avm">${p.emoji || ""}</span><span class="grow ell">${esc(p.name)}</span><b>${p.score}</b></div>`).join("")}
         <p class="muted small" style="text-align:center">${Q.waiting_host}</p>`;
     } else { // ended
       html = `<div class="verdict ${d.rank === 1 ? "gold" : "ok"}">${["🥇", "🥈", "🥉"][d.rank - 1] || "🎉"}<br>${Q.your_place}: ${d.rank} ${Q.of_n.replace("{n}", d.players)}</div>
@@ -2438,7 +2451,7 @@ function quizPodiumHtml(podium, Q) {
   const order = [1, 0, 2]; // 2-й, 1-й, 3-й — визуальный подиум
   return `<div class="podium">` + order.map(i => {
     const p = podium[i]; if (!p) return "";
-    return `<div class="pod p${i}"><div class="podname ell">${esc(p.name)}</div>
+    return `<div class="pod p${i}"><div class="podav">${p.emoji || ""}</div><div class="podname ell">${esc(p.name)}</div>
       <div class="podbar"><span>${["🥇", "🥈", "🥉"][i]}</span><b>${p.score}</b></div></div>`;
   }).join("") + `</div>`;
 }

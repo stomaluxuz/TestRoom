@@ -20,6 +20,21 @@ MIN_SECONDS, MAX_SECONDS = 5, 120
 MAX_QUESTIONS = 20
 BASE_POINTS = 500  # правильный ответ — минимум столько; плюс бонус за скорость до 1000
 
+# Эмодзи-аватары, которые игрок выбирает при входе (как в Kahoot).
+AVATARS = [
+    "😎", "🦊", "🐱", "🐼", "🐸", "🦁", "🐯", "🐵", "🐨", "🐰",
+    "🦄", "🐲", "🐙", "🦖", "🐬", "🦅", "🐝", "🌟", "🔥", "🚀",
+    "🎧", "⚽", "🎮", "🍕", "🦈", "🐧", "👑", "🤖",
+]
+_DEFAULT_AVATAR = "🙂"
+
+
+def _pick_avatar(emoji: str) -> str:
+    """Берём выбранный эмодзи, если он из набора; иначе — случайный из набора."""
+    if emoji in AVATARS:
+        return emoji
+    return secrets.choice(AVATARS)
+
 
 # ------------------------------------------------ очки (формула как в Kahoot)
 
@@ -89,8 +104,9 @@ async def _get_game(db: AsyncSession, game_id: int) -> QuizGame:
     return game
 
 
-async def join(db: AsyncSession, pin: str, user: User) -> dict:
-    """Войти в игру по коду. Имя обязательно (студент выкладывает результат под ФИО)."""
+async def join(db: AsyncSession, pin: str, user: User, emoji: str = "") -> dict:
+    """Войти в игру по коду. Имя обязательно (студент выкладывает результат под ФИО).
+    emoji — выбранный аватар (как в Kahoot); если не из набора, подберётся случайный."""
     pin = "".join(ch for ch in (pin or "") if ch.isdigit())
     if len(pin) != 6:
         raise ServiceError("Код игры — это 6 цифр.")
@@ -108,14 +124,20 @@ async def join(db: AsyncSession, pin: str, user: User) -> dict:
         select(QuizPlayer).where(QuizPlayer.game_id == game.id, QuizPlayer.user_id == user.id)
     )
     if existing is None:
-        db.add(QuizPlayer(game_id=game.id, user_id=user.id, name=user.full_name.strip()[:200]))
+        db.add(QuizPlayer(
+            game_id=game.id, user_id=user.id, name=user.full_name.strip()[:200],
+            emoji=_pick_avatar(emoji),
+        ))
         await db.commit()
         player = await db.scalar(
             select(QuizPlayer).where(QuizPlayer.game_id == game.id, QuizPlayer.user_id == user.id)
         )
     else:
         player = existing
-    return {"game_id": game.id, "player_id": player.id, "pin": pin}
+        if emoji in AVATARS and existing.emoji != emoji:  # разрешаем сменить аватар при повторном входе
+            existing.emoji = emoji
+            await db.commit()
+    return {"game_id": game.id, "player_id": player.id, "pin": pin, "emoji": player.emoji}
 
 
 # ------------------------------------------------ ход игры (ведёт учитель)
@@ -217,7 +239,7 @@ async def _answer_counts(db: AsyncSession, game_id: int, q_index: int, n_opts: i
 def _leaderboard(players: list[QuizPlayer], deltas: dict[int, int] | None = None, top: int = 5) -> list[dict]:
     out = []
     for i, p in enumerate(players[:top]):
-        row = {"name": p.name, "score": p.score, "rank": i + 1}
+        row = {"name": p.name, "emoji": p.emoji or _DEFAULT_AVATAR, "score": p.score, "rank": i + 1}
         if deltas is not None:
             row["delta"] = deltas.get(p.id, 0)
         out.append(row)
@@ -236,7 +258,7 @@ async def host_state(db: AsyncSession, game_id: int, host: User) -> dict:
         "is_last": game.current_index + 1 >= n,
     }
     if game.phase == "lobby":
-        out["joined"] = [p.name for p in players]
+        out["joined"] = [{"name": p.name, "emoji": p.emoji or _DEFAULT_AVATAR} for p in players]
         out["can_start"] = len(players) > 0
     elif game.phase == "question":
         q = game.questions[game.current_index]
@@ -275,7 +297,7 @@ async def play_state(db: AsyncSession, game_id: int, player_id: int, user: User)
     if player is None or player.game_id != game.id or player.user_id != user.id:
         raise ServiceError("Вы не участник этой игры.", 403)
     n = len(game.questions or [])
-    out = {"phase": game.phase, "total": n, "name": player.name}
+    out = {"phase": game.phase, "total": n, "name": player.name, "emoji": player.emoji or _DEFAULT_AVATAR}
     if game.phase == "lobby":
         out["players"] = await db.scalar(
             select(func.count()).select_from(QuizPlayer).where(QuizPlayer.game_id == game.id)

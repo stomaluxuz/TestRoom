@@ -100,6 +100,10 @@ def _migrate(conn):
     if "join_window_min" not in scols:
         # у старых сессий окна не было (0 — приём открыт весь тест)
         conn.execute(text("ALTER TABLE sessions ADD COLUMN join_window_min INTEGER NOT NULL DEFAULT 0"))
+    if insp.has_table("quiz_players"):
+        qcols = {c["name"] for c in insp.get_columns("quiz_players")}
+        if "emoji" not in qcols:  # эмодзи-аватар игрока (как в Kahoot)
+            conn.execute(text("ALTER TABLE quiz_players ADD COLUMN emoji VARCHAR(8) NOT NULL DEFAULT ''"))
 
 
 def _sqlite_file(url: str) -> str | None:

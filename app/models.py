@@ -353,6 +353,7 @@ class QuizPlayer(Base):
     game_id: Mapped[int] = mapped_column(ForeignKey("quiz_games.id"), index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
+    emoji: Mapped[str] = mapped_column(String(8), default="")  # эмодзи-аватар (как в Kahoot)
     score: Mapped[int] = mapped_column(Integer, default=0)
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

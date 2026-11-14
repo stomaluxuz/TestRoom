@@ -335,6 +335,7 @@ class QuizCreateIn(BaseModel):
 
 class QuizJoinIn(BaseModel):
     pin: str
+    emoji: str = ""
 
 
 class QuizAnswerIn(BaseModel):
@@ -718,7 +719,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/quiz/join")
     async def quiz_join(body: QuizJoinIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
-        return await quizmod.join(db, body.pin, user)
+        return await quizmod.join(db, body.pin, user, body.emoji)
 
     @app.get("/api/quiz/{game_id}/host")
     async def quiz_host(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):

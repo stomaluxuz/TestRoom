@@ -238,3 +238,12 @@ body.testing .credit { display: none; }
 .pod.p0 .podbar { background: linear-gradient(180deg,#f5b301,#d89000); height: 96px; }
 .pod.p1 .podbar { background: linear-gradient(180deg,#9aa0a6,#70757a); height: 72px; }
 .pod.p2 .podbar { background: linear-gradient(180deg,#cd7f32,#a9661f); height: 56px; }
+
+/* аватары игроков в куизе */
+.avpick { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 2px 0 6px; }
+.av { border: 1px solid var(--bg2); background: var(--bg); border-radius: 10px; padding: 6px 0;
+  font-size: 22px; cursor: pointer; line-height: 1; }
+.av.on { background: var(--btn); border-color: var(--btn); transform: scale(1.08); }
+.avm { font-size: 18px; flex-shrink: 0; }
+.podav { font-size: 26px; line-height: 1; margin-bottom: 2px; }
+@media (max-width: 360px) { .avpick { grid-template-columns: repeat(6, 1fr); } }

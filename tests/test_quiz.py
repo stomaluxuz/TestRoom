@@ -94,6 +94,25 @@ async def test_full_game_flow(db):
     assert pst["phase"] == "ended" and pst["rank"] == 1 and pst["score"] > 0
 
 
+async def test_player_avatar(db):
+    teacher, game = await _game(db)
+    s1 = await make_student(db, 361, "С Аватаром")
+    j = await quiz.join(db, game.pin, s1, "🦊")
+    assert j["emoji"] == "🦊"
+    # аватар виден в лобби у ведущего
+    host = await quiz.host_state(db, game.id, teacher)
+    assert host["joined"][0] == {"name": "С Аватаром", "emoji": "🦊"}
+    # неизвестный эмодзи → подберётся случайный из набора (не пустой)
+    s2 = await make_student(db, 362, "Без Выбора")
+    j2 = await quiz.join(db, game.pin, s2, "не-эмодзи")
+    assert j2["emoji"] in quiz.AVATARS
+    # аватар доходит до подиума
+    await quiz.advance(db, game.id, teacher)
+    await quiz.advance(db, game.id, teacher)  # вопрос → reveal
+    rev = await quiz.host_state(db, game.id, teacher)
+    assert all("emoji" in p for p in rev["leaderboard"])
+
+
 async def test_cannot_join_running_game(db):
     teacher, game = await _game(db)
     s1 = await make_student(db, 321, "Ранний")
