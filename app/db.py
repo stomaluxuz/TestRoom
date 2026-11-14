@@ -104,6 +104,10 @@ def _migrate(conn):
         qcols = {c["name"] for c in insp.get_columns("quiz_players")}
         if "emoji" not in qcols:  # эмодзи-аватар игрока (как в Kahoot)
             conn.execute(text("ALTER TABLE quiz_players ADD COLUMN emoji VARCHAR(8) NOT NULL DEFAULT ''"))
+    if insp.has_table("quiz_games"):
+        gcols = {c["name"] for c in insp.get_columns("quiz_games")}
+        if "auto" not in gcols:  # авто-переход вопросов
+            conn.execute(text("ALTER TABLE quiz_games ADD COLUMN auto BOOLEAN NOT NULL DEFAULT 1"))
 
 
 def _sqlite_file(url: str) -> str | None:

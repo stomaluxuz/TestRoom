@@ -27,6 +27,16 @@ def test_score_formula():
     assert quiz.score_for(5000, 20000, False) == 0
 
 
+async def test_auto_flag(db):
+    teacher = await make_teacher(db, 390, "Ведущий")
+    g_auto = await quiz.create_game(db, teacher, "T", "ru", QS, 20)  # auto по умолчанию
+    assert g_auto.auto is True
+    assert (await quiz.host_state(db, g_auto.id, teacher))["auto"] is True
+    g_man = await quiz.create_game(db, teacher, "T", "ru", QS, 20, auto=False)
+    assert g_man.auto is False
+    assert (await quiz.host_state(db, g_man.id, teacher))["auto"] is False
+
+
 async def test_create_requires_teacher(db):
     student = await make_student(db, 301)
     with pytest.raises(svc.ServiceError) as e:

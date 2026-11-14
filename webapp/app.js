@@ -2180,6 +2180,7 @@ const QUIZ = {
     results_title: "🏆 Итоги", your_place: "Твоё место", of_n: "из {n}", home_btn: "На главную",
     end_host: "Игра окончена", join_title: "Войти в куиз", join_hint: "Введи код игры от преподавателя",
     join_btn: "Войти", score_word: "очков", pick_avatar: "Выбери аватар",
+    mode_label: "Переход вопросов", mode_auto: "Авто", mode_manual: "Вручную", next_in: "Дальше через",
   },
   uz: {
     host_entry: "🎮 Kuiz (Kahoot kabi)", join_entry: "🎮 Kuizga kirish",
@@ -2196,6 +2197,7 @@ const QUIZ = {
     results_title: "🏆 Natijalar", your_place: "Sizning o'rningiz", of_n: "{n} dan", home_btn: "Bosh sahifa",
     end_host: "O'yin tugadi", join_title: "Kuizga kirish", join_hint: "O'qituvchidan olgan kodni kiriting",
     join_btn: "Kirish", score_word: "ball", pick_avatar: "Avatar tanlang",
+    mode_label: "Savollar o'tishi", mode_auto: "Avto", mode_manual: "Qo'lda", next_in: "Keyingisi",
   },
   en: {
     host_entry: "🎮 Quiz (Kahoot-style)", join_entry: "🎮 Join a quiz",
@@ -2212,8 +2214,10 @@ const QUIZ = {
     results_title: "🏆 Results", your_place: "Your place", of_n: "of {n}", home_btn: "Home",
     end_host: "Game over", join_title: "Join a quiz", join_hint: "Enter the game PIN from your teacher",
     join_btn: "Join", score_word: "pts", pick_avatar: "Pick your avatar",
+    mode_label: "Question transitions", mode_auto: "Auto", mode_manual: "Manual", next_in: "Next in",
   },
 };
+const QUIZ_REVEAL_MS = 10000;  // сколько показывать правильный ответ до авто-перехода
 function quizT() { return QUIZ[LANG] || QUIZ.ru; }
 const QUIZ_SHAPE = ["▲", "◆", "●", "■", "★", "✚"];
 const QUIZ_AVATARS = ["😎", "🦊", "🐱", "🐼", "🐸", "🦁", "🐯", "🐵", "🐨", "🐰",
@@ -2251,19 +2255,25 @@ async function quizCreateScreen() {
             <option value="10">10</option><option value="15">15</option>
             <option value="20" selected>20</option><option value="30">30</option></select></div>
       </div>
+      <label class="muted small" style="margin-top:10px;display:block">${Q.mode_label}</label>
+      <div class="langpick" id="qmode">
+        <button class="lbtn on" data-a="1">⚡ ${Q.mode_auto}</button>
+        <button class="lbtn" data-a="0">✋ ${Q.mode_manual}</button>
+      </div>
       <button class="btn" id="qmake" style="margin-top:14px">${Q.create_btn}</button>
     </div>
   `);
-  let lang = LANG;
+  let lang = LANG, auto = 1;
   onAll("#qlang .lbtn", "click", el => { lang = el.dataset.l; $app.querySelectorAll("#qlang .lbtn").forEach(b => b.classList.toggle("on", b === el)); });
+  onAll("#qmode .lbtn", "click", el => { auto = +el.dataset.a; $app.querySelectorAll("#qmode .lbtn").forEach(b => b.classList.toggle("on", b === el)); });
   on("#qmake", "click", async () => {
     const topic = (document.getElementById("qtopic").value || "").trim();
     if (!topic) { toast(Q.topic_ph); return; }
     const count = Math.max(3, Math.min(20, +document.getElementById("qcount").value || 8));
     const seconds = +document.getElementById("qsec").value || 20;
-    render(`<div class="center"><div class="spin"></div><p class="muted" style="margin-top:14px">${Q.generating}</p></div>`);
+    render(`<div class="center"><div class="spin big"></div><p class="muted" style="margin-top:14px">${Q.generating}</p></div>`);
     try {
-      const r = await api("/api/quiz/create", { json: { topic, lang, count, seconds } });
+      const r = await api("/api/quiz/create", { json: { topic, lang, count, seconds, auto: !!auto } });
       go(quizHostScreen, { game_id: r.game_id }, true);
     } catch (e) { haptic("error"); toast(e.message); go(quizCreateScreen, {}, true); }
   });
@@ -2273,10 +2283,18 @@ async function quizCreateScreen() {
 async function quizHostScreen({ game_id }) {
   const Q = quizT();
   let deadline = 0;
+  const st = { key: "", revealAt: 0, fired: false };  // одноразовый авто-переход на каждую фазу
+  async function autoNext() {
+    try { await api(`/api/quiz/${game_id}/next`, { method: "POST" }); }
+    catch (e) { st.fired = false; return; }  // не вышло — попробуем на следующем тике
+    load();
+  }
   async function load() {
     let d;
     try { d = await api(`/api/quiz/${game_id}/host`); } catch (e) { toast(e.message); return; }
     const scroll = window.scrollY;
+    const key = d.phase + ":" + d.index;
+    if (st.key !== key) { st.key = key; st.fired = false; st.revealAt = d.phase === "reveal" ? Date.now() : 0; }
     let html = "";
     if (d.phase === "lobby") {
       html = `
@@ -2308,6 +2326,7 @@ async function quizHostScreen({ game_id }) {
         ${d.leaderboard.map((p, i) => `<div class="lbrow"><span class="lbrank">${i + 1}</span>
           <span class="avm">${p.emoji || ""}</span><span class="grow ell">${esc(p.name)}</span>${p.delta ? `<span class="lbdelta">+${p.delta}</span>` : ""}
           <b>${p.score}</b></div>`).join("")}
+        ${d.auto ? `<p class="muted small" style="text-align:center;margin-top:10px">${Q.next_in} <b id="rnext"></b></p>` : ""}
         <button class="btn" id="next">${d.is_last ? Q.finish_btn : Q.next_btn}</button>`;
     } else { // ended
       html = quizPodiumHtml(d.podium, Q) +
@@ -2330,11 +2349,18 @@ async function quizHostScreen({ game_id }) {
     on("#home", "click", home);
     clearInterval(quizHostScreen._tick);
     quizHostScreen._tick = setInterval(() => {
-      const el = document.getElementById("ctime"), cb = document.getElementById("cb");
-      if (!el) return;
-      const left = Math.max(0, (deadline - Date.now()) / 1000);
-      el.textContent = Math.ceil(left) + "s";
-      if (cb) cb.style.width = Math.min(100, left * 100 / (d.seconds || 20)) + "%";
+      if (d.phase === "question") {
+        const left = Math.max(0, (deadline - Date.now()) / 1000);
+        const el = document.getElementById("ctime"), cb = document.getElementById("cb");
+        if (el) el.textContent = Math.ceil(left) + "s";
+        if (cb) cb.style.width = Math.min(100, left * 100 / (d.seconds || 20)) + "%";
+        // авто-показ ответа: время вышло или все ответили (ведущий мог уже нажать вручную)
+        if (d.auto && !st.fired && (left <= 0 || (d.players > 0 && d.answered >= d.players))) { st.fired = true; autoNext(); }
+      } else if (d.phase === "reveal" && d.auto) {
+        const left = Math.max(0, (st.revealAt + QUIZ_REVEAL_MS - Date.now()) / 1000);
+        const el = document.getElementById("rnext"); if (el) el.textContent = Math.ceil(left) + "s";
+        if (!st.fired && left <= 0) { st.fired = true; autoNext(); }
+      }
     }, 200);
     timers.push(quizHostScreen._tick);
   }

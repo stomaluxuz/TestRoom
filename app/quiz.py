@@ -79,7 +79,8 @@ async def _gen_pin(db: AsyncSession) -> str:
 
 
 async def create_game(
-    db: AsyncSession, host: User, topic: str, lang: str, questions: list[dict], seconds: int
+    db: AsyncSession, host: User, topic: str, lang: str, questions: list[dict],
+    seconds: int, auto: bool = True
 ) -> QuizGame:
     """Создать игру из уже сгенерированных вопросов (генерацию делает эндпоинт)."""
     require_teacher(host)
@@ -90,7 +91,8 @@ async def create_game(
     game = QuizGame(
         host_id=host.id, pin=pin, topic=(topic or "").strip()[:300],
         lang=lang if lang in ("ru", "uz", "en") else "ru",
-        seconds=seconds, questions=questions[:MAX_QUESTIONS], phase="lobby", current_index=-1,
+        seconds=seconds, auto=bool(auto), questions=questions[:MAX_QUESTIONS],
+        phase="lobby", current_index=-1,
     )
     db.add(game)
     await db.commit()
@@ -255,7 +257,7 @@ async def host_state(db: AsyncSession, game_id: int, host: User) -> dict:
     out = {
         "phase": game.phase, "pin": game.pin, "topic": game.topic,
         "total": n, "index": game.current_index, "players": len(players),
-        "is_last": game.current_index + 1 >= n,
+        "is_last": game.current_index + 1 >= n, "auto": game.auto,
     }
     if game.phase == "lobby":
         out["joined"] = [{"name": p.name, "emoji": p.emoji or _DEFAULT_AVATAR} for p in players]

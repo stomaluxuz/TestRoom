@@ -333,6 +333,7 @@ class QuizGame(Base):
     topic: Mapped[str] = mapped_column(String(300))
     lang: Mapped[str] = mapped_column(String(2), default="ru")
     seconds: Mapped[int] = mapped_column(Integer, default=20)  # время на вопрос
+    auto: Mapped[bool] = mapped_column(Boolean, default=True)  # авто-переход вопросов (ведущий может обгонять)
     # [{"q": str, "options": [str, ...], "correct": int}, ...]
     questions: Mapped[list] = mapped_column(JSON)
     phase: Mapped[str] = mapped_column(String(12), default="lobby")  # lobby|question|reveal|ended

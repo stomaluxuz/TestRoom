@@ -331,6 +331,7 @@ class QuizCreateIn(BaseModel):
     lang: str = "ru"
     count: int = Field(8, ge=3, le=20)
     seconds: int = Field(20, ge=5, le=120)
+    auto: bool = True  # авто-переход вопросов (ведущий может обгонять вручную)
 
 
 class QuizJoinIn(BaseModel):
@@ -710,7 +711,7 @@ def create_app() -> FastAPI:
             {"q": p.text, "options": p.options, "correct": p.correct}
             for p in parsed if p.correct is not None and p.correct >= 0 and len(p.options) >= 2
         ]
-        game = await quizmod.create_game(db, user, topic, lang, questions, body.seconds)
+        game = await quizmod.create_game(db, user, topic, lang, questions, body.seconds, body.auto)
         return {"game_id": game.id, "pin": game.pin, "total": len(game.questions), "seconds": game.seconds}
 
     @app.get("/api/quiz/mine")
