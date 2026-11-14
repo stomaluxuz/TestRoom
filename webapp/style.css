@@ -247,3 +247,22 @@ body.testing .credit { display: none; }
 .avm { font-size: 18px; flex-shrink: 0; }
 .podav { font-size: 26px; line-height: 1; margin-bottom: 2px; }
 @media (max-width: 360px) { .avpick { grid-template-columns: repeat(6, 1fr); } }
+
+/* ---------------------------------------------------------------- игра «Мафия» */
+.mtimer { text-align: center; font-size: 22px; font-weight: 700; margin: 6px 0; }
+.mrole { border-radius: 12px; padding: 10px 14px; margin: 8px 0 12px; text-align: center; font-size: 15px; background: var(--bg); }
+.mrole.r-mafia { background: rgba(226,64,61,.15); color: var(--danger); }
+.mrole.r-doctor { background: rgba(31,158,77,.15); color: var(--ok); }
+.mrole.r-commissar { background: rgba(42,125,225,.15); color: var(--link); }
+.mtargets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+.mtile { display: flex; align-items: center; gap: 8px; border: 1px solid var(--bg2); background: var(--bg);
+  border-radius: 12px; padding: 14px 12px; font-size: 15px; cursor: pointer; min-height: 52px; position: relative; }
+.mtile.sel { border-color: var(--btn); background: rgba(36,129,204,.12); outline: 2px solid var(--btn); }
+.mtile .ell { flex: 1; min-width: 0; }
+.mvotes { position: absolute; top: 6px; right: 8px; color: var(--link); }
+.mroster { margin: 8px 0; }
+.mrow { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+.mrow.out { opacity: .5; text-decoration: line-through; }
+.mrow .grow { flex: 1; min-width: 0; }
+.tc { text-align: center; }
+@media (max-width: 360px) { .mtargets { grid-template-columns: 1fr; } }

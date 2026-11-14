@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import db as dbmod
+from . import mafia as mafiamod
 from . import quiz as quizmod
 from . import services as svc
 from .auth import AuthError, validate_init_data
@@ -342,6 +343,19 @@ class QuizJoinIn(BaseModel):
 class QuizAnswerIn(BaseModel):
     q_index: int = Field(ge=0, le=100)
     option: int = Field(ge=0, le=20)
+
+
+class MafiaCreateIn(BaseModel):
+    emoji: str = ""
+
+
+class MafiaJoinIn(BaseModel):
+    pin: str
+    emoji: str = ""
+
+
+class MafiaTargetIn(BaseModel):
+    target_id: int
 
 
 # ---------------------------------------------------------------- приложение
@@ -744,6 +758,39 @@ def create_app() -> FastAPI:
     async def quiz_answer(game_id: int, player_id: int, body: QuizAnswerIn,
                           user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         return await quizmod.submit_answer(db, game_id, player_id, user, body.q_index, body.option)
+
+    # ------------------------------------------------ игра «Мафия» (создать может любой)
+    @app.post("/api/mafia/create")
+    async def mafia_create(body: MafiaCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await mafiamod.create_game(db, user, body.emoji)
+
+    @app.post("/api/mafia/join")
+    async def mafia_join(body: MafiaJoinIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await mafiamod.join(db, body.pin, user, body.emoji)
+
+    @app.post("/api/mafia/{game_id}/start")
+    async def mafia_start(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        await mafiamod.start(db, game_id, user)
+        return {"ok": True}
+
+    @app.post("/api/mafia/{game_id}/end")
+    async def mafia_end(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        await mafiamod.end_game(db, game_id, user)
+        return {"ok": True}
+
+    @app.get("/api/mafia/{game_id}/play")
+    async def mafia_play(game_id: int, player_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await mafiamod.play_state(db, game_id, player_id, user)
+
+    @app.post("/api/mafia/{game_id}/action")
+    async def mafia_action(game_id: int, player_id: int, body: MafiaTargetIn,
+                           user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await mafiamod.night_action(db, game_id, player_id, user, body.target_id)
+
+    @app.post("/api/mafia/{game_id}/vote")
+    async def mafia_vote(game_id: int, player_id: int, body: MafiaTargetIn,
+                         user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await mafiamod.cast_vote(db, game_id, player_id, user, body.target_id)
 
     @app.get("/api/student/history")
     async def my_history(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):

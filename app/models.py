@@ -377,3 +377,62 @@ class QuizAnswer(Base):
     answered_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     __table_args__ = (UniqueConstraint("player_id", "q_index", name="uq_quiz_answer"),)
+
+
+# ------------------------------------------------ игра «Мафия» (офлайн, ведёт приложение)
+
+class MafiaGame(Base):
+    """Игра «Мафия»: приложение раздаёт роли и ведёт фазы по таймеру.
+    Обсуждение — вживую; телефон у каждого показывает роль, ночные действия и голосование."""
+
+    __tablename__ = "mafia_games"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    host_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)  # организатор (любой)
+    pin: Mapped[str] = mapped_column(String(6), index=True)
+    phase: Mapped[str] = mapped_column(String(12), default="lobby")  # lobby|night|day|vote|ended
+    round: Mapped[int] = mapped_column(Integer, default=0)
+    night_seconds: Mapped[int] = mapped_column(Integer, default=40)
+    day_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    vote_seconds: Mapped[int] = mapped_column(Integer, default=40)
+    phase_ends_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_killed_id: Mapped[int | None] = mapped_column(Integer)  # кого убили прошлой ночью (0/None — никого)
+    last_out_id: Mapped[int | None] = mapped_column(Integer)     # кого выгнали прошлым голосованием
+    winner: Mapped[str | None] = mapped_column(String(8))        # town|mafia
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (Index("ix_mafia_games_pin_phase", "pin", "phase"),)
+
+
+class MafiaPlayer(Base):
+    """Участник «Мафии»."""
+
+    __tablename__ = "mafia_players"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("mafia_games.id"), index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    emoji: Mapped[str] = mapped_column(String(8), default="")
+    role: Mapped[str] = mapped_column(String(12), default="")  # mafia|civilian|commissar|doctor
+    alive: Mapped[bool] = mapped_column(Boolean, default=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("game_id", "user_id", name="uq_mafia_player"),)
+
+
+class MafiaAction(Base):
+    """Ночное действие или дневной голос. Одно действие на игрока в раунде на вид."""
+
+    __tablename__ = "mafia_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("mafia_games.id"), index=True)
+    round: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(8))  # kill|heal|check|vote
+    actor_id: Mapped[int] = mapped_column(Integer)   # id игрока-источника
+    target_id: Mapped[int] = mapped_column(Integer)  # id игрока-цели
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("game_id", "round", "kind", "actor_id", name="uq_mafia_action"),)

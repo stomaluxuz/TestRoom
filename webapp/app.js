@@ -2263,10 +2263,10 @@ function gamesScreen() {
     <h1>${Q.games_title}</h1>
     <p class="muted small" style="margin:-6px 0 12px">${Q.games_hint}</p>
     ${tile("quiz", "🎯", Q.quiz_name, Q.quiz_desc, true)}
-    ${tile("mafia", "🕵️", Q.mafia_name, Q.mafia_desc, false)}
+    ${tile("mafia", "🕵️", Q.mafia_name, Q.mafia_desc, true)}
   `);
   on("#g-quiz", "click", () => go(isHost ? quizCreateScreen : quizJoinScreen));
-  on("#g-mafia", "click", () => go(gameSoonScreen, { emoji: "🕵️", name: Q.mafia_name, desc: Q.mafia_desc }));
+  on("#g-mafia", "click", () => go(mafiaMenuScreen));
 }
 
 // ---- заглушка игры «в разработке»
@@ -2527,6 +2527,200 @@ function quizPodiumHtml(podium, Q) {
     return `<div class="pod p${i}"><div class="podav">${p.emoji || ""}</div><div class="podname ell">${esc(p.name)}</div>
       <div class="podbar"><span>${["🥇", "🥈", "🥉"][i]}</span><b>${p.score}</b></div></div>`;
   }).join("") + `</div>`;
+}
+
+/* ================================================================ игра «Мафия» (офлайн) */
+
+const MAFIA = {
+  ru: {
+    menu_title: "Мафия", create_btn: "➕ Создать игру", join_label: "…или войти по коду",
+    join_btn: "Войти", online_soon: "🌐 Онлайн-версия с чатом — скоро",
+    pin_title: "Код игры", start_btn: "▶️ Начать", lobby_wait: "Ждём, пока организатор начнёт…",
+    players_word: "игроков", need_more: "Нужно минимум {n} игрока",
+    night_title: "Ночь", day_title: "День", vote_title: "Голосование",
+    you_are: "Ваша роль", civ_sleep: "Город спит 😴 Ждите утра.",
+    mafia_kill: "Выберите жертву 🔪", mates: "Ваши подельники", mafia_alone: "Вы — единственная мафия",
+    doc_heal: "Кого лечить? 💉", comm_check: "Кого проверить? 🔎",
+    check_mafia: "🔴 Это МАФИЯ!", check_not: "🟢 Не мафия",
+    killed_msg: "Ночью убили", nobody_killed: "Этой ночью все выжили! 🎉",
+    discuss: "Обсуждайте вживую: кто мафия?", vote_pick: "Голосуйте: кто мафия? 🗳",
+    voted: "Ваш голос", dead: "Вы выбыли из игры", spectating: "Наблюдаете",
+    win_town: "🏆 Победил город!", win_mafia: "🔪 Победила мафия!", roles_reveal: "Кто кем был",
+    end_btn: "Завершить игру", alive_word: "в игре", dead_word: "выбыл", waiting_next: "Ждём следующую фазу…",
+    r_mafia: "Мафия", r_civilian: "Мирный житель", r_commissar: "Комиссар", r_doctor: "Доктор",
+  },
+  uz: {
+    menu_title: "Mafiya", create_btn: "➕ O'yin yaratish", join_label: "…yoki kod bilan kirish",
+    join_btn: "Kirish", online_soon: "🌐 Chatli onlayn versiya — tez orada",
+    pin_title: "O'yin kodi", start_btn: "▶️ Boshlash", lobby_wait: "Tashkilotchi boshlashini kutyapmiz…",
+    players_word: "o'yinchi", need_more: "Kamida {n} o'yinchi kerak",
+    night_title: "Tun", day_title: "Kun", vote_title: "Ovoz berish",
+    you_are: "Sizning rolingiz", civ_sleep: "Shahar uxlayapti 😴 Tongni kuting.",
+    mafia_kill: "Qurbonni tanlang 🔪", mates: "Sheriklaringiz", mafia_alone: "Siz yagona mafiyasiz",
+    doc_heal: "Kimni davolaysiz? 💉", comm_check: "Kimni tekshirasiz? 🔎",
+    check_mafia: "🔴 Bu MAFIYA!", check_not: "🟢 Mafiya emas",
+    killed_msg: "Kechasi o'ldirildi", nobody_killed: "Bu kecha hamma omon qoldi! 🎉",
+    discuss: "Jonli muhokama qiling: kim mafiya?", vote_pick: "Ovoz bering: kim mafiya? 🗳",
+    voted: "Sizning ovozingiz", dead: "O'yindan chiqdingiz", spectating: "Kuzatyapsiz",
+    win_town: "🏆 Shahar g'olib!", win_mafia: "🔪 Mafiya g'olib!", roles_reveal: "Kim kim edi",
+    end_btn: "O'yinni yakunlash", alive_word: "o'yinda", dead_word: "chiqdi", waiting_next: "Keyingi bosqichni kutyapmiz…",
+    r_mafia: "Mafiya", r_civilian: "Tinch aholi", r_commissar: "Komissar", r_doctor: "Shifokor",
+  },
+  en: {
+    menu_title: "Mafia", create_btn: "➕ Create game", join_label: "…or join by PIN",
+    join_btn: "Join", online_soon: "🌐 Online version with chat — coming soon",
+    pin_title: "Game PIN", start_btn: "▶️ Start", lobby_wait: "Waiting for the host to start…",
+    players_word: "players", need_more: "Need at least {n} players",
+    night_title: "Night", day_title: "Day", vote_title: "Voting",
+    you_are: "Your role", civ_sleep: "The town is asleep 😴 Wait for morning.",
+    mafia_kill: "Choose a victim 🔪", mates: "Your partners", mafia_alone: "You are the only mafia",
+    doc_heal: "Who to heal? 💉", comm_check: "Who to check? 🔎",
+    check_mafia: "🔴 This is MAFIA!", check_not: "🟢 Not mafia",
+    killed_msg: "Killed last night", nobody_killed: "Everyone survived the night! 🎉",
+    discuss: "Discuss out loud: who's the mafia?", vote_pick: "Vote: who's the mafia? 🗳",
+    voted: "Your vote", dead: "You're out of the game", spectating: "Spectating",
+    win_town: "🏆 Town wins!", win_mafia: "🔪 Mafia wins!", roles_reveal: "Who was who",
+    end_btn: "End game", alive_word: "in", dead_word: "out", waiting_next: "Waiting for the next phase…",
+    r_mafia: "Mafia", r_civilian: "Civilian", r_commissar: "Detective", r_doctor: "Doctor",
+  },
+};
+function mafiaT() { return MAFIA[LANG] || MAFIA.ru; }
+const MAFIA_ROLE_EMOJI = { mafia: "🔪", civilian: "👤", commissar: "🔎", doctor: "💉" };
+function mafiaRoleName(role) { const M = mafiaT(); return { mafia: M.r_mafia, civilian: M.r_civilian, commissar: M.r_commissar, doctor: M.r_doctor }[role] || role; }
+
+// ---- меню: создать или войти
+function mafiaMenuScreen() {
+  const M = mafiaT();
+  let avatar = QUIZ_AVATARS[Math.floor(Math.random() * QUIZ_AVATARS.length)];
+  render(`
+    ${langBar()}
+    <h1>🕵️ ${M.menu_title}</h1>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 6px">${quizT().pick_avatar}</p>
+      <div class="avpick" id="avpick">
+        ${QUIZ_AVATARS.map(a => `<button class="av ${a === avatar ? "on" : ""}" data-a="${a}">${a}</button>`).join("")}
+      </div>
+      <button class="btn" id="mcreate">${M.create_btn}</button>
+      <p class="muted small" style="text-align:center;margin:12px 0 6px">${M.join_label}</p>
+      <input id="mpin" class="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
+      <button class="btn secondary" id="mjoin">${M.join_btn}</button>
+    </div>
+    <p class="muted small" style="text-align:center">${M.online_soon}</p>
+  `);
+  onAll("#avpick .av", "click", el => { avatar = el.dataset.a; $app.querySelectorAll("#avpick .av").forEach(b => b.classList.toggle("on", b === el)); haptic("success"); });
+  const pin = document.getElementById("mpin");
+  pin.addEventListener("input", () => { pin.value = pin.value.replace(/\D/g, "").slice(0, 6); });
+  on("#mcreate", "click", async () => {
+    try { const r = await api("/api/mafia/create", { json: { emoji: avatar } });
+      go(mafiaPlayScreen, { game_id: r.game_id, player_id: r.player_id }, true);
+    } catch (e) { haptic("error"); toast(e.message); }
+  });
+  on("#mjoin", "click", async () => {
+    if (pin.value.length !== 6) { toast(t("code_6")); return; }
+    try { const r = await api("/api/mafia/join", { json: { pin: pin.value, emoji: avatar } });
+      go(mafiaPlayScreen, { game_id: r.game_id, player_id: r.player_id }, true);
+    } catch (e) { haptic("error"); toast(e.message); }
+  });
+}
+
+// плитки живых игроков для выбора цели
+function mafiaTargets(d, excludeSelf) {
+  return `<div class="mtargets">` + d.players.filter(p => p.alive && (!excludeSelf || p.id !== d.me.id))
+    .map(p => `<button class="mtile" data-t="${p.id}">${p.emoji} <span class="ell">${esc(p.name)}</span></button>`).join("") + `</div>`;
+}
+function mafiaRoster(d) {
+  const M = mafiaT();
+  return `<div class="mroster">` + d.players.map(p => `
+    <div class="mrow ${p.alive ? "" : "out"}">${p.emoji} <span class="grow ell">${esc(p.name)}</span>
+      ${p.role ? `<span class="muted small">${MAFIA_ROLE_EMOJI[p.role] || ""} ${mafiaRoleName(p.role)}</span>` : `<span class="muted small">${p.alive ? M.alive_word : M.dead_word}</span>`}
+    </div>`).join("") + `</div>`;
+}
+
+// ---- игровой экран «Мафии»
+async function mafiaPlayScreen({ game_id, player_id }) {
+  const M = mafiaT();
+  let deadline = 0, busy = false;
+  async function post(path, target) {
+    if (busy) return; busy = true; haptic("success");
+    try { await api(`/api/mafia/${game_id}/${path}?player_id=${player_id}`, { json: { target_id: target } }); }
+    catch (e) { toast(e.message); }
+    busy = false; load();
+  }
+  async function load() {
+    let d;
+    try { d = await api(`/api/mafia/${game_id}/play?player_id=${player_id}`); } catch (e) { return; }
+    const scroll = window.scrollY;
+    if (d.phase === "night" || d.phase === "day" || d.phase === "vote") deadline = Date.now() + (d.remaining_ms || 0);
+    const timer = (d.phase === "night" || d.phase === "day" || d.phase === "vote")
+      ? `<div class="mtimer"><span id="mt"></span></div>` : "";
+    const endBtn = (d.is_host && d.phase !== "ended") ? `<button class="link danger" id="mend" style="margin-top:14px">${M.end_btn}</button>` : "";
+    let html = "";
+    if (d.phase === "lobby") {
+      html = `
+        <p class="muted small" style="text-align:center;margin:0">${mafiaT().pin_title}</p>
+        <div class="big-code">${d.pin.slice(0, 3)} ${d.pin.slice(3)}</div>
+        <p class="muted small" style="text-align:center">${d.players_count} ${M.players_word}</p>
+        <div class="chips">${d.players.map(p => `<span class="chip">${p.emoji} ${esc(p.name)}</span>`).join("")}</div>
+        ${d.is_host
+          ? `<button class="btn" id="mstart" ${d.can_start ? "" : "disabled"}>${M.start_btn}</button>
+             ${d.can_start ? "" : `<p class="muted small" style="text-align:center">${M.need_more.replace("{n}", d.min_players)}</p>`}`
+          : `<p class="muted" style="text-align:center">${M.lobby_wait}</p>`}`;
+    } else if (d.phase === "ended") {
+      const town = d.result.winner === "town";
+      html = `<div class="verdict ${town ? "ok" : "bad"}">${town ? M.win_town : M.win_mafia}</div>
+        <h2>${M.roles_reveal}</h2>${mafiaRoster({ players: d.result.roles.map(r => ({ ...r, id: 0 })) })}
+        <button class="btn" id="mhome">${quizT().home_btn}</button>`;
+    } else {
+      // night / day / vote — общий каркас
+      const head = { night: `🌙 ${M.night_title}`, day: `☀️ ${M.day_title}`, vote: `🗳 ${M.vote_title}` }[d.phase];
+      let body = "";
+      if (!d.me.alive) {
+        body = `<div class="card" style="text-align:center">💀 ${M.dead} · ${M.spectating}</div>${mafiaRoster(d)}`;
+      } else if (d.phase === "night") {
+        const nt = d.night;
+        if (!nt.can_act) body = `<div class="card" style="text-align:center">${M.civ_sleep}</div>`;
+        else if (nt.kind === "kill") {
+          const mates = (nt.mates || []);
+          body = `<p class="tc" style="margin:4px 0">${M.mafia_kill}</p>
+            <p class="muted small tc">${mates.length ? M.mates + ": " + mates.map(m => m.emoji + " " + esc(m.name)).join(", ") : M.mafia_alone}</p>
+            ${mafiaTargets(d, true)}`;
+        } else if (nt.kind === "heal") body = `<p class="tc" style="margin:4px 0">${M.doc_heal}</p>${mafiaTargets(d, false)}`;
+        else if (nt.kind === "check") {
+          body = `<p class="tc" style="margin:4px 0">${M.comm_check}</p>${mafiaTargets(d, true)}`;
+          if (nt.check_result) body += `<div class="card" style="text-align:center">${nt.check_result === "mafia" ? M.check_mafia : M.check_not}</div>`;
+        }
+      } else if (d.phase === "day") {
+        const k = d.day.killed;
+        body = `<div class="card" style="text-align:center">${k ? `${M.killed_msg}: ${k.emoji} <b>${esc(k.name)}</b> <span class="muted">(${mafiaRoleName(k.role)})</span>` : M.nobody_killed}</div>
+          <p class="tc muted">${M.discuss}</p>${mafiaRoster(d)}`;
+      } else if (d.phase === "vote") {
+        body = `<p class="tc" style="margin:4px 0">${M.vote_pick}</p>` +
+          `<div class="mtargets">` + d.players.filter(p => p.alive).map(p =>
+            `<button class="mtile ${d.vote.voted === p.id ? "sel" : ""}" data-t="${p.id}">${p.emoji} <span class="ell">${esc(p.name)}</span>${d.vote.tally[p.id] ? `<b class="mvotes">${d.vote.tally[p.id]}</b>` : ""}</button>`).join("") + `</div>`;
+      }
+      const myrole = `<div class="mrole r-${d.me.role}">${MAFIA_ROLE_EMOJI[d.me.role]} ${M.you_are}: <b>${mafiaRoleName(d.me.role)}</b></div>`;
+      html = `<h2 class="tc" style="margin:4px 0">${head}</h2>${timer}${myrole}${body}`;
+    }
+    $app.innerHTML = html + endBtn;
+    window.scrollTo(0, scroll);
+    on("#mstart", "click", async () => { try { await api(`/api/mafia/${game_id}/start`, { method: "POST" }); } catch (e) { toast(e.message); } load(); });
+    on("#mhome", "click", home);
+    on("#mend", "click", async () => { if (!confirm(M.end_btn + "?")) return; try { await api(`/api/mafia/${game_id}/end`, { method: "POST" }); } catch (e) { toast(e.message); } load(); });
+    onAll(".mtargets .mtile", "click", el => post(d.phase === "vote" ? "vote" : "action", +el.dataset.t));
+    // подсветка своего ночного выбора
+    if (d.phase === "night" && d.night && d.night.acted) {
+      const b = $app.querySelector(`.mtile[data-t="${d.night.acted}"]`); if (b) b.classList.add("sel");
+    }
+    clearInterval(mafiaPlayScreen._tick);
+    mafiaPlayScreen._tick = setInterval(() => {
+      const el = document.getElementById("mt"); if (!el) return;
+      el.textContent = Math.ceil(Math.max(0, (deadline - Date.now()) / 1000)) + "s";
+    }, 250);
+    timers.push(mafiaPlayScreen._tick);
+  }
+  render(`<div class="center muted">${t("loading")}</div>`);
+  await load();
+  timers.push(setInterval(load, 1500));
 }
 
 boot();
