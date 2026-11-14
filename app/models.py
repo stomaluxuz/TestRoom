@@ -317,3 +317,61 @@ class TopUp(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
     decided_by: Mapped[int | None] = mapped_column(BigInteger)
+
+
+# ------------------------------------------------ живой куиз (Kahoot-режим)
+
+class QuizGame(Base):
+    """Синхронная игра-куиз: учитель открывает вопросы по одному, все отвечают
+    одновременно, очки — за правильность и скорость. Темпом управляет учитель."""
+
+    __tablename__ = "quiz_games"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    host_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    pin: Mapped[str] = mapped_column(String(6), index=True)  # код входа
+    topic: Mapped[str] = mapped_column(String(300))
+    lang: Mapped[str] = mapped_column(String(2), default="ru")
+    seconds: Mapped[int] = mapped_column(Integer, default=20)  # время на вопрос
+    # [{"q": str, "options": [str, ...], "correct": int}, ...]
+    questions: Mapped[list] = mapped_column(JSON)
+    phase: Mapped[str] = mapped_column(String(12), default="lobby")  # lobby|question|reveal|ended
+    current_index: Mapped[int] = mapped_column(Integer, default=-1)  # -1 — лобби
+    question_started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (Index("ix_quiz_games_pin_phase", "pin", "phase"),)
+
+
+class QuizPlayer(Base):
+    """Участник живого куиза."""
+
+    __tablename__ = "quiz_players"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("quiz_games.id"), index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("game_id", "user_id", name="uq_quiz_player"),)
+
+
+class QuizAnswer(Base):
+    """Ответ участника на один вопрос куиза (для подсчёта и статистики по вариантам)."""
+
+    __tablename__ = "quiz_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("quiz_games.id"), index=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("quiz_players.id"), index=True)
+    q_index: Mapped[int] = mapped_column(Integer)
+    chosen: Mapped[int] = mapped_column(Integer)
+    is_correct: Mapped[bool] = mapped_column(Boolean)
+    points: Mapped[int] = mapped_column(Integer, default=0)
+    ms: Mapped[int] = mapped_column(Integer, default=0)  # время ответа, мс
+    answered_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("player_id", "q_index", name="uq_quiz_answer"),)

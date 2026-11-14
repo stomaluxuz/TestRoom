@@ -189,3 +189,52 @@ body.testing .credit { display: none; }
   padding: 10px 12px; font-size: 14px; }
 #bksubj { width: 100%; padding: 11px; border-radius: 10px; border: 1px solid var(--bg2);
   background: var(--bg); color: var(--text); font-size: 15px; }
+
+/* ---------------------------------------------------------------- живой куиз (Kahoot) */
+.field { margin: 8px 0 2px; }
+.ok-soft { background: rgba(47,168,79,.12); color: var(--ok); border: 0; margin-top: 10px; }
+
+.qbig { font-size: 54px; line-height: 1; }
+.qbody { font-size: 20px; font-weight: 600; text-align: center; margin: 14px 0; line-height: 1.3; }
+
+.cbar { height: 8px; background: var(--bg2); border-radius: 5px; overflow: hidden; margin: 6px 0 2px; }
+.cbar span { display: block; height: 100%; width: 100%; background: linear-gradient(90deg,#2fa84f,#f5b301,#e5484d);
+  border-radius: 5px; transition: width .2s linear; }
+.qh { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.qh b { font-size: 18px; }
+
+.qopts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 14px; }
+.qopt { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 12px; padding: 16px 12px;
+  color: #fff; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; min-height: 56px; }
+.qopt .qshape { font-size: 18px; flex-shrink: 0; }
+.qopt .qtext { flex: 1; min-width: 0; }
+.qopt .qcount { background: rgba(0,0,0,.25); border-radius: 10px; padding: 1px 8px; font-size: 13px; }
+.qopt.c0 { background: #e2403d; } .qopt.c1 { background: #2a7de1; }
+.qopt.c2 { background: #d89000; } .qopt.c3 { background: #1f9e4d; }
+.qopt.c4 { background: #8a3ffc; } .qopt.c5 { background: #0aa2b0; }
+.qopt.dim { opacity: .35; }
+.qopt.correct { outline: 3px solid #fff; box-shadow: 0 0 0 3px var(--ok); opacity: 1; }
+.qopt.chosen { outline: 3px solid #fff; box-shadow: 0 0 0 3px #111; }
+.qopt:disabled { cursor: default; }
+@media (max-width: 360px) { .qopts { grid-template-columns: 1fr; } }
+
+.verdict { border-radius: 18px; padding: 22px; text-align: center; font-size: 22px; font-weight: 700;
+  color: #fff; margin: 6px 0 14px; line-height: 1.35; }
+.verdict.ok { background: #1f9e4d; } .verdict.bad { background: #e2403d; }
+.verdict.gold { background: linear-gradient(135deg,#f5b301,#e08900); }
+
+.lbrow { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 6px; }
+.lbrow.me { outline: 2px solid var(--btn); }
+.lbrank { width: 24px; text-align: center; font-weight: 700; color: var(--link); }
+.lbdelta { color: var(--ok); font-size: 13px; font-weight: 600; }
+
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 8px; margin: 16px 0; }
+.pod { flex: 1; max-width: 33%; text-align: center; }
+.podname { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.podbar { border-radius: 12px 12px 0 0; padding: 12px 6px; color: #fff; }
+.podbar span { display: block; font-size: 22px; }
+.podbar b { font-size: 16px; }
+.pod.p0 .podbar { background: linear-gradient(180deg,#f5b301,#d89000); height: 96px; }
+.pod.p1 .podbar { background: linear-gradient(180deg,#9aa0a6,#70757a); height: 72px; }
+.pod.p2 .podbar { background: linear-gradient(180deg,#cd7f32,#a9661f); height: 56px; }

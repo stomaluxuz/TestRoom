@@ -925,6 +925,7 @@ async function studentHome() {
       <button class="btn" id="join">${t("start_test")}</button>
     </div>
     ${payCard}
+    <div class="item" id="quizjoin"><span class="ico">🎮</span><div class="grow">${quizT().join_entry}</div><span class="muted">›</span></div>
     <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
     ${extra}
     <h2>${t("my_results")}</h2>
@@ -935,6 +936,7 @@ async function studentHome() {
   code.addEventListener("input", () => { code.value = code.value.replace(/\D/g, "").slice(0, 6); });
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
   on("#join", "click", join);
+  on("#quizjoin", "click", () => go(quizJoinScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#topup", "click", () => {
     toast("Откройте чат бота и нажмите «💳 Пополнить баланс»");
@@ -1200,6 +1202,7 @@ async function teacherHome() {
     <div class="item" id="upload"><span class="ico">📤</span><div class="grow">${t("upload_test")}</div></div>
     <div class="item" id="history"><span class="ico">🕘</span><div class="grow">${t("history")}</div></div>
     <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
+    <div class="item" id="quiz"><span class="ico">🎮</span><div class="grow">${quizT().host_entry}</div><span class="muted">›</span></div>
     <div class="item" id="aichat"><span class="ico">💬</span><div class="grow">${t("ai_assistant")}</div>${ME.is_pro_plus || ME.is_admin ? "" : `<span class="badge pro">Pro+</span>`}<span class="muted">›</span></div>
     <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
     <div class="item" id="libupload"><span class="ico">⬆️</span><div class="grow">${libT().upload}</div></div>
@@ -1218,6 +1221,7 @@ async function teacherHome() {
   on("#upload", "click", () => go(uploadScreen));
   on("#history", "click", () => go(historyScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
+  on("#quiz", "click", () => go(quizCreateScreen));
   on("#aichat", "click", () => go(aiChatScreen));
   on("#library", "click", () => go(libraryScreen));
   on("#libupload", "click", () => go(libraryUploadScreen));
@@ -2156,6 +2160,287 @@ function drawAiChat(loading) {
   on("#send", "click", send);
   const ta = document.getElementById("q");
   if (ta) ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+}
+
+/* ================================================================ живой куиз (Kahoot) */
+
+const QUIZ = {
+  ru: {
+    host_entry: "🎮 Куиз (как Kahoot)", join_entry: "🎮 Войти в куиз",
+    create_title: "Новый куиз", topic_ph: "Тема (напр. «Анатомия: череп»)",
+    count_label: "Сколько вопросов", seconds_label: "Секунд на вопрос", lang_label: "Язык вопросов",
+    create_btn: "🚀 Создать игру", generating: "Perga придумывает вопросы…",
+    pin_title: "Код игры", joined: "В игре", start_btn: "▶️ Начать игру", nobody: "Пока никто не зашёл — назови код",
+    waiting_host: "Ждём, пока ведущий начнёт…", you_in: "Ты в игре!",
+    q_of: "Вопрос {i} из {n}", answered_n: "Ответили", reveal_btn: "Показать ответ",
+    pick: "Выбери ответ", answered_wait: "Ответ принят — ждём остальных", time_up: "Время вышло",
+    correct_was: "Правильный ответ", next_btn: "Следующий вопрос →", finish_btn: "🏁 Завершить",
+    leaderboard: "Таблица лидеров", place: "место", players_word: "игроков",
+    correct_word: "Верно!", wrong_word: "Мимо", no_answer: "Не успел(а)",
+    results_title: "🏆 Итоги", your_place: "Твоё место", of_n: "из {n}", home_btn: "На главную",
+    end_host: "Игра окончена", join_title: "Войти в куиз", join_hint: "Введи код игры от преподавателя",
+    join_btn: "Войти", score_word: "очков",
+  },
+  uz: {
+    host_entry: "🎮 Kuiz (Kahoot kabi)", join_entry: "🎮 Kuizga kirish",
+    create_title: "Yangi kuiz", topic_ph: "Mavzu (masalan «Anatomiya: bosh suyagi»)",
+    count_label: "Nechta savol", seconds_label: "Har savolga soniya", lang_label: "Savollar tili",
+    create_btn: "🚀 O'yin yaratish", generating: "Perga savollar o'ylab topmoqda…",
+    pin_title: "O'yin kodi", joined: "O'yinda", start_btn: "▶️ Boshlash", nobody: "Hali hech kim kirmadi — kodni ayting",
+    waiting_host: "Boshlovchi boshlashini kutyapmiz…", you_in: "O'yindasiz!",
+    q_of: "{n} dan {i}-savol", answered_n: "Javob berdi", reveal_btn: "Javobni ko'rsatish",
+    pick: "Javobni tanlang", answered_wait: "Javob qabul qilindi — kutamiz", time_up: "Vaqt tugadi",
+    correct_was: "To'g'ri javob", next_btn: "Keyingi savol →", finish_btn: "🏁 Yakunlash",
+    leaderboard: "Peshqadamlar", place: "o'rin", players_word: "o'yinchi",
+    correct_word: "To'g'ri!", wrong_word: "Xato", no_answer: "Ulgurmadingiz",
+    results_title: "🏆 Natijalar", your_place: "Sizning o'rningiz", of_n: "{n} dan", home_btn: "Bosh sahifa",
+    end_host: "O'yin tugadi", join_title: "Kuizga kirish", join_hint: "O'qituvchidan olgan kodni kiriting",
+    join_btn: "Kirish", score_word: "ball",
+  },
+  en: {
+    host_entry: "🎮 Quiz (Kahoot-style)", join_entry: "🎮 Join a quiz",
+    create_title: "New quiz", topic_ph: "Topic (e.g. “Anatomy: the skull”)",
+    count_label: "Questions", seconds_label: "Seconds per question", lang_label: "Questions language",
+    create_btn: "🚀 Create game", generating: "Perga is writing questions…",
+    pin_title: "Game PIN", joined: "In the game", start_btn: "▶️ Start game", nobody: "No one has joined yet — read out the PIN",
+    waiting_host: "Waiting for the host to start…", you_in: "You're in!",
+    q_of: "Question {i} of {n}", answered_n: "Answered", reveal_btn: "Show answer",
+    pick: "Pick an answer", answered_wait: "Answer locked in — waiting for others", time_up: "Time's up",
+    correct_was: "Correct answer", next_btn: "Next question →", finish_btn: "🏁 Finish",
+    leaderboard: "Leaderboard", place: "place", players_word: "players",
+    correct_word: "Correct!", wrong_word: "Wrong", no_answer: "No answer",
+    results_title: "🏆 Results", your_place: "Your place", of_n: "of {n}", home_btn: "Home",
+    end_host: "Game over", join_title: "Join a quiz", join_hint: "Enter the game PIN from your teacher",
+    join_btn: "Join", score_word: "pts",
+  },
+};
+function quizT() { return QUIZ[LANG] || QUIZ.ru; }
+const QUIZ_SHAPE = ["▲", "◆", "●", "■", "★", "✚"];
+
+function quizOptions(options, { correct = null, chosen = null, counts = null, tappable = false } = {}) {
+  return `<div class="qopts">` + options.map((o, i) => {
+    let cls = "qopt c" + i;
+    if (correct !== null) cls += i === correct ? " correct" : " dim";
+    if (chosen === i) cls += " chosen";
+    const cnt = counts ? `<span class="qcount">${counts[i] || 0}</span>` : "";
+    return `<button class="${cls}" ${tappable ? `data-opt="${i}"` : "disabled"}>
+      <span class="qshape">${QUIZ_SHAPE[i] || "●"}</span><span class="qtext">${esc(o)}</span>${cnt}</button>`;
+  }).join("") + `</div>`;
+}
+
+// ---- учитель: создание куиза
+async function quizCreateScreen() {
+  const Q = quizT();
+  render(`
+    ${langBar()}
+    <h1>${Q.create_title}</h1>
+    <div class="card">
+      <input id="qtopic" class="field" placeholder="${esc(Q.topic_ph)}" autocomplete="off">
+      <label class="muted small">${Q.lang_label}</label>
+      <div class="langpick" id="qlang">
+        ${["ru", "uz", "en"].map(l => `<button class="lbtn ${l === LANG ? "on" : ""}" data-l="${l}">${l === "ru" ? "🇷🇺 Рус" : l === "uz" ? "🇺🇿 Ўзб" : "🇬🇧 Eng"}</button>`).join("")}
+      </div>
+      <div class="row" style="gap:10px;margin-top:10px">
+        <div class="grow"><label class="muted small">${Q.count_label}</label>
+          <input id="qcount" class="field" type="number" min="3" max="20" value="8" inputmode="numeric"></div>
+        <div class="grow"><label class="muted small">${Q.seconds_label}</label>
+          <select id="qsec" class="field">
+            <option value="10">10</option><option value="15">15</option>
+            <option value="20" selected>20</option><option value="30">30</option></select></div>
+      </div>
+      <button class="btn" id="qmake" style="margin-top:14px">${Q.create_btn}</button>
+    </div>
+  `);
+  let lang = LANG;
+  onAll("#qlang .lbtn", "click", el => { lang = el.dataset.l; $app.querySelectorAll("#qlang .lbtn").forEach(b => b.classList.toggle("on", b === el)); });
+  on("#qmake", "click", async () => {
+    const topic = (document.getElementById("qtopic").value || "").trim();
+    if (!topic) { toast(Q.topic_ph); return; }
+    const count = Math.max(3, Math.min(20, +document.getElementById("qcount").value || 8));
+    const seconds = +document.getElementById("qsec").value || 20;
+    render(`<div class="center"><div class="spin"></div><p class="muted" style="margin-top:14px">${Q.generating}</p></div>`);
+    try {
+      const r = await api("/api/quiz/create", { json: { topic, lang, count, seconds } });
+      go(quizHostScreen, { game_id: r.game_id }, true);
+    } catch (e) { haptic("error"); toast(e.message); go(quizCreateScreen, {}, true); }
+  });
+}
+
+// ---- учитель: экран ведущего
+async function quizHostScreen({ game_id }) {
+  const Q = quizT();
+  let deadline = 0;
+  async function load() {
+    let d;
+    try { d = await api(`/api/quiz/${game_id}/host`); } catch (e) { toast(e.message); return; }
+    const scroll = window.scrollY;
+    let html = "";
+    if (d.phase === "lobby") {
+      html = `
+        <p class="muted small" style="text-align:center;margin:0">${esc(d.topic)}</p>
+        <p class="muted small" style="text-align:center;margin:8px 0 0">${Q.pin_title}</p>
+        <div class="big-code">${d.pin.slice(0, 3)} ${d.pin.slice(3)}</div>
+        <div class="stats"><div class="stat"><span class="muted small">${Q.joined}</span><b>${d.players}</b></div>
+          <div class="stat"><span class="muted small">${Q.count_label}</span><b>${d.total}</b></div></div>
+        ${d.joined.length ? `<div class="chips">${d.joined.map(n => `<span class="chip">${esc(n)}</span>`).join("")}</div>`
+          : `<div class="card muted" style="text-align:center">${Q.nobody}</div>`}
+        <button class="btn" id="next" ${d.can_start ? "" : "disabled"}>${Q.start_btn}</button>
+        <button class="btn danger" id="end">${Q.finish_btn}</button>`;
+    } else if (d.phase === "question") {
+      deadline = Date.now() + (d.remaining_ms || 0);
+      html = `
+        <p class="muted small" style="text-align:center;margin:0">${Q.q_of.replace("{i}", d.index + 1).replace("{n}", d.total)}</p>
+        <div class="cbar"><span id="cb"></span></div>
+        <div class="qh"><b id="ctime"></b><span class="muted">${Q.answered_n}: <b>${d.answered}</b>/${d.players}</span></div>
+        <div class="qbody">${esc(d.question.text)}</div>
+        ${quizOptions(d.question.options)}
+        <button class="btn" id="next">${Q.reveal_btn}</button>`;
+    } else if (d.phase === "reveal") {
+      const total = Math.max(1, d.counts.reduce((a, b) => a + b, 0));
+      html = `
+        <p class="muted small" style="text-align:center;margin:0">${Q.q_of.replace("{i}", d.index + 1).replace("{n}", d.total)}</p>
+        <div class="qbody">${esc(d.question.text)}</div>
+        ${quizOptions(d.question.options, { correct: d.correct, counts: d.counts })}
+        <h2>${Q.leaderboard}</h2>
+        ${d.leaderboard.map((p, i) => `<div class="lbrow"><span class="lbrank">${i + 1}</span>
+          <span class="grow ell">${esc(p.name)}</span>${p.delta ? `<span class="lbdelta">+${p.delta}</span>` : ""}
+          <b>${p.score}</b></div>`).join("")}
+        <button class="btn" id="next">${d.is_last ? Q.finish_btn : Q.next_btn}</button>`;
+    } else { // ended
+      html = quizPodiumHtml(d.podium, Q) +
+        (d.leaderboard || []).slice(3).map((p, i) => `<div class="lbrow"><span class="lbrank">${i + 4}</span>
+          <span class="grow ell">${esc(p.name)}</span><b>${p.score}</b></div>`).join("") +
+        `<button class="btn" id="home">${Q.home_btn}</button>`;
+    }
+    $app.innerHTML = html;
+    window.scrollTo(0, scroll);
+    on("#next", "click", async () => {
+      const b = $app.querySelector("#next"); if (b) b.disabled = true;
+      try { await api(`/api/quiz/${game_id}/next`, { method: "POST" }); } catch (e) { toast(e.message); if (b) b.disabled = false; return; }
+      load();
+    });
+    on("#end", "click", async () => {
+      if (!confirm(Q.finish_btn + "?")) return;
+      try { await api(`/api/quiz/${game_id}/end`, { method: "POST" }); } catch (e) { toast(e.message); }
+      load();
+    });
+    on("#home", "click", home);
+    clearInterval(quizHostScreen._tick);
+    quizHostScreen._tick = setInterval(() => {
+      const el = document.getElementById("ctime"), cb = document.getElementById("cb");
+      if (!el) return;
+      const left = Math.max(0, (deadline - Date.now()) / 1000);
+      el.textContent = Math.ceil(left) + "s";
+      if (cb) cb.style.width = Math.min(100, left * 100 / (d.seconds || 20)) + "%";
+    }, 200);
+    timers.push(quizHostScreen._tick);
+  }
+  render(`<div class="center muted">${t("loading")}</div>`);
+  await load();
+  timers.push(setInterval(load, 2000));
+}
+
+// ---- студент: вход по коду
+async function quizJoinScreen() {
+  const Q = quizT();
+  render(`
+    ${langBar()}
+    <h1>${Q.join_title}</h1>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 6px">${Q.join_hint}</p>
+      <input id="qpin" class="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
+      <button class="btn" id="qjoin">${Q.join_btn}</button>
+    </div>
+  `);
+  const pin = document.getElementById("qpin");
+  pin.addEventListener("input", () => { pin.value = pin.value.replace(/\D/g, "").slice(0, 6); });
+  pin.addEventListener("keydown", e => { if (e.key === "Enter") doJoin(); });
+  on("#qjoin", "click", doJoin);
+  async function doJoin() {
+    if (pin.value.length !== 6) { toast(t("code_6")); return; }
+    try {
+      const r = await api("/api/quiz/join", { json: { pin: pin.value } });
+      go(quizPlayScreen, { game_id: r.game_id, player_id: r.player_id }, true);
+    } catch (e) { haptic("error"); toast(e.message); }
+  }
+}
+
+// ---- студент: игровой экран
+async function quizPlayScreen({ game_id, player_id }) {
+  const Q = quizT();
+  let sig = "", deadline = 0, locking = false;
+  async function load() {
+    let d;
+    try { d = await api(`/api/quiz/${game_id}/play?player_id=${player_id}`); } catch (e) { return; }
+    const newSig = `${d.phase}:${d.index != null ? d.index : "-"}:${d.answered ? "a" : "n"}`;
+    if (d.phase === "question") deadline = Date.now() + (d.remaining_ms || 0);
+    if (newSig === sig && d.phase === "question") { return; } // не перерисовываем — таймер крутит отдельный интервал
+    sig = newSig;
+    let html = "";
+    if (d.phase === "lobby") {
+      html = `<div class="center"><div class="qbig">🎮</div><h1>${Q.you_in}</h1>
+        <p class="muted">${esc(d.name)}</p><div class="spin" style="margin:16px auto"></div>
+        <p class="muted small">${Q.waiting_host} · ${d.players} ${Q.players_word}</p></div>`;
+    } else if (d.phase === "question") {
+      const answered = d.answered;
+      html = `
+        <p class="muted small" style="text-align:center;margin:0">${Q.q_of.replace("{i}", d.index + 1).replace("{n}", d.total)}</p>
+        <div class="cbar"><span id="cb"></span></div>
+        <div class="qbody">${esc(d.question.text)}</div>
+        ${answered
+          ? quizOptions(d.question.options, { chosen: d.chosen }) + `<div class="card ok-soft" style="text-align:center">${Q.answered_wait}</div>`
+          : `<p class="muted small" id="pickhint" style="text-align:center">${Q.pick}</p>` + quizOptions(d.question.options, { tappable: true })}`;
+    } else if (d.phase === "reveal") {
+      const y = d.you;
+      const verdict = !y.answered ? Q.no_answer : (y.correct ? Q.correct_word : Q.wrong_word);
+      const vcls = y.correct ? "ok" : "bad";
+      html = `
+        <div class="verdict ${vcls}">${y.correct ? "✅" : (y.answered ? "❌" : "⏱")}<br>${verdict}${y.points ? ` · +${y.points}` : ""}</div>
+        <div class="stats"><div class="stat"><span class="muted small">${Q.place}</span><b>${y.rank}</b></div>
+          <div class="stat"><span class="muted small">${Q.score_word}</span><b>${y.score}</b></div></div>
+        <h2>${Q.leaderboard}</h2>
+        ${d.leaderboard.map((p, i) => `<div class="lbrow ${p.name === d.name ? "me" : ""}"><span class="lbrank">${i + 1}</span>
+          <span class="grow ell">${esc(p.name)}</span><b>${p.score}</b></div>`).join("")}
+        <p class="muted small" style="text-align:center">${Q.waiting_host}</p>`;
+    } else { // ended
+      html = `<div class="verdict ${d.rank === 1 ? "gold" : "ok"}">${["🥇", "🥈", "🥉"][d.rank - 1] || "🎉"}<br>${Q.your_place}: ${d.rank} ${Q.of_n.replace("{n}", d.players)}</div>
+        <p class="center"><b>${d.score}</b> ${Q.score_word}</p>
+        ${quizPodiumHtml(d.podium, Q)}
+        <button class="btn" id="home">${Q.home_btn}</button>`;
+    }
+    $app.innerHTML = html;
+    on("#home", "click", home);
+    onAll(".qopt[data-opt]", "click", async el => {
+      if (locking) return; locking = true;
+      const opt = +el.dataset.opt;
+      $app.querySelectorAll(".qopt").forEach(b => { b.disabled = true; b.classList.toggle("chosen", b === el); });
+      haptic("success");
+      try { await api(`/api/quiz/${game_id}/answer?player_id=${player_id}`, { json: { q_index: d.index, option: opt } }); }
+      catch (e) { toast(e.message); }
+      locking = false; sig = ""; load();
+    });
+    clearInterval(quizPlayScreen._tick);
+    quizPlayScreen._tick = setInterval(() => {
+      const cb = document.getElementById("cb"); if (!cb) return;
+      const left = Math.max(0, (deadline - Date.now()) / 1000);
+      cb.style.width = Math.min(100, left * 100 / (d.seconds || 20)) + "%";
+      if (left <= 0) $app.querySelectorAll(".qopt[data-opt]").forEach(b => { b.disabled = true; });
+    }, 200);
+    timers.push(quizPlayScreen._tick);
+  }
+  render(`<div class="center muted">${t("loading")}</div>`);
+  await load();
+  timers.push(setInterval(load, 1200));
+}
+
+function quizPodiumHtml(podium, Q) {
+  if (!podium || !podium.length) return "";
+  const order = [1, 0, 2]; // 2-й, 1-й, 3-й — визуальный подиум
+  return `<div class="podium">` + order.map(i => {
+    const p = podium[i]; if (!p) return "";
+    return `<div class="pod p${i}"><div class="podname ell">${esc(p.name)}</div>
+      <div class="podbar"><span>${["🥇", "🥈", "🥉"][i]}</span><b>${p.score}</b></div></div>`;
+  }).join("") + `</div>`;
 }
 
 boot();

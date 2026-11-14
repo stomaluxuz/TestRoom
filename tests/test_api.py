@@ -80,6 +80,55 @@ async def test_ai_presentation_endpoint(client, monkeypatch):
         assert (await svc.get_or_create_user(db, 900)).balance == 95000
 
 
+async def test_quiz_endpoints_flow(client, monkeypatch):
+    """Живой куиз через HTTP: учитель создаёт (ИИ замокан), студент входит, играет, финал."""
+    from app import ai as aimod
+    from app.parsers import ParsedQuestion
+
+    async def fake_gen(topic, count=10, lang="ru", **kw):
+        return [
+            ParsedQuestion("2+2?", ["3", "4", "5"], 1),
+            ParsedQuestion("Небо?", ["Синее", "Зелёное"], 0),
+        ]
+
+    monkeypatch.setattr(aimod, "generate_test_questions", fake_gen)
+
+    T = headers(ADMIN_ID)  # админ = преподаватель-ведущий
+    r = await client.post("/api/quiz/create", headers=T, json={"topic": "Разное", "count": 5, "seconds": 20})
+    assert r.status_code == 200
+    game = r.json()
+    assert len(game["pin"]) == 6 and game["total"] == 2
+
+    # студент без ФИО не войдёт
+    S = headers(950)
+    assert (await client.post("/api/quiz/join", headers=S, json={"pin": game["pin"]})).status_code == 409
+    await client.post("/api/me/name", headers=S, json={"full_name": "Игрок Один"})
+    j = (await client.post("/api/quiz/join", headers=S, json={"pin": game["pin"]})).json()
+    assert j["game_id"] == game["game_id"]
+
+    gid, pid = game["game_id"], j["player_id"]
+    # не ведущий не управляет
+    assert (await client.post(f"/api/quiz/{gid}/next", headers=S)).status_code == 403
+
+    # лобби → вопрос
+    host = (await client.post(f"/api/quiz/{gid}/next", headers=T)).json()
+    assert host["phase"] == "question"
+    play = (await client.get(f"/api/quiz/{gid}/play?player_id={pid}", headers=S)).json()
+    assert play["phase"] == "question" and "correct" not in play["question"]
+
+    ans = (await client.post(f"/api/quiz/{gid}/answer?player_id={pid}", headers=S,
+                             json={"q_index": 0, "option": 1})).json()
+    assert ans["correct"] is True and ans["points"] >= 500
+
+    host = (await client.post(f"/api/quiz/{gid}/next", headers=T)).json()  # reveal
+    assert host["phase"] == "reveal" and host["correct"] == 1
+    # до конца
+    await client.post(f"/api/quiz/{gid}/next", headers=T)  # вопрос 1
+    await client.post(f"/api/quiz/{gid}/next", headers=T)  # reveal 1
+    end = (await client.post(f"/api/quiz/{gid}/next", headers=T)).json()  # ended
+    assert end["phase"] == "ended" and end["podium"][0]["name"] == "Игрок Один"
+
+
 async def test_lang_sync(client):
     """Язык из Mini App сохраняется в БД — общий с ботом."""
     H = headers(900)

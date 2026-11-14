@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import db as dbmod
+from . import quiz as quizmod
 from . import services as svc
 from .auth import AuthError, validate_init_data
 from .config import settings
@@ -323,6 +324,22 @@ class LibraryDecideIn(BaseModel):
 
 class ProgressIn(BaseModel):
     page: int = Field(1, ge=1, le=100_000)
+
+
+class QuizCreateIn(BaseModel):
+    topic: str
+    lang: str = "ru"
+    count: int = Field(8, ge=3, le=20)
+    seconds: int = Field(20, ge=5, le=120)
+
+
+class QuizJoinIn(BaseModel):
+    pin: str
+
+
+class QuizAnswerIn(BaseModel):
+    q_index: int = Field(ge=0, le=100)
+    option: int = Field(ge=0, le=20)
 
 
 # ---------------------------------------------------------------- приложение
@@ -674,6 +691,57 @@ def create_app() -> FastAPI:
             user.id, request.state.real_user_id, topic, lang, slides, author, group, book_ids, charged
         ))
         return {"ok": True, "queued": True}
+
+    # ------------------------------------------------ живой куиз (Kahoot-режим)
+    @app.post("/api/quiz/create")
+    async def quiz_create(body: QuizCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Учитель создаёт живой куиз: Perga генерирует вопросы по теме, возвращаем PIN."""
+        from . import limits
+        from .ai import generate_test_questions
+        svc.require_teacher(user)
+        topic = (body.topic or "").strip()
+        if not topic:
+            raise svc.ServiceError("Напишите тему куиза.")
+        lang = body.lang if body.lang in ("ru", "uz", "en") else "ru"
+        async with limits.gen_slot(), limits.timing("quiz-gen"):
+            parsed = await generate_test_questions(topic, count=body.count, lang=lang, difficulty="medium")
+        questions = [
+            {"q": p.text, "options": p.options, "correct": p.correct}
+            for p in parsed if p.correct is not None and p.correct >= 0 and len(p.options) >= 2
+        ]
+        game = await quizmod.create_game(db, user, topic, lang, questions, body.seconds)
+        return {"game_id": game.id, "pin": game.pin, "total": len(game.questions), "seconds": game.seconds}
+
+    @app.get("/api/quiz/mine")
+    async def quiz_mine(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await quizmod.host_games(db, user)
+
+    @app.post("/api/quiz/join")
+    async def quiz_join(body: QuizJoinIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await quizmod.join(db, body.pin, user)
+
+    @app.get("/api/quiz/{game_id}/host")
+    async def quiz_host(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await quizmod.host_state(db, game_id, user)
+
+    @app.post("/api/quiz/{game_id}/next")
+    async def quiz_next(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        await quizmod.advance(db, game_id, user)
+        return await quizmod.host_state(db, game_id, user)
+
+    @app.post("/api/quiz/{game_id}/end")
+    async def quiz_end(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        await quizmod.end_game(db, game_id, user)
+        return await quizmod.host_state(db, game_id, user)
+
+    @app.get("/api/quiz/{game_id}/play")
+    async def quiz_play(game_id: int, player_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await quizmod.play_state(db, game_id, player_id, user)
+
+    @app.post("/api/quiz/{game_id}/answer")
+    async def quiz_answer(game_id: int, player_id: int, body: QuizAnswerIn,
+                          user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await quizmod.submit_answer(db, game_id, player_id, user, body.q_index, body.option)
 
     @app.get("/api/student/history")
     async def my_history(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
