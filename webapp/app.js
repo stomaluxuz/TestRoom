@@ -59,6 +59,9 @@ const T = {
     code_6: "Код состоит из 6 цифр", no_conn: "Нет связи с сервером. Проверьте интернет.",
     edit_name: "Изменить ФИО", fio: "ФИО", vuz: "Вуз", kafedra: "Кафедра",
     edit_work: "Изменить вуз / кафедру", back_home: "На главную",
+    support: "🆘 Поддержка", support_hint: "Опишите проблему или вопрос — мы ответим в чате бота.",
+    support_ph: "Ваше сообщение…", support_send: "Отправить", support_sent: "Отправлено ✅ Мы ответим в боте.",
+    support_empty: "Напишите сообщение.",
     teacher: "Преподаватель", plan_free: "Бесплатный тариф", plan_pro: "Pro до",
     test_running: "Идёт тест", code: "код", time_left: "осталось",
     my_tests: "Мои тесты", upload_test: "Загрузить тест", history: "История запусков",
@@ -152,6 +155,9 @@ const T = {
     code_6: "Kod 6 raqamdan iborat", no_conn: "Server bilan aloqa yo'q. Internetni tekshiring.",
     edit_name: "F.I.Sh. o'zgartirish", fio: "F.I.Sh.", vuz: "OTM", kafedra: "Kafedra",
     edit_work: "OTM / kafedrani o'zgartirish", back_home: "Bosh sahifaga",
+    support: "🆘 Yordam", support_hint: "Muammo yoki savolni yozing — bot chatida javob beramiz.",
+    support_ph: "Xabaringiz…", support_send: "Yuborish", support_sent: "Yuborildi ✅ Botda javob beramiz.",
+    support_empty: "Xabar yozing.",
     teacher: "O'qituvchi", plan_free: "Bepul tarif", plan_pro: "Pro:",
     test_running: "Test ketmoqda", code: "kod", time_left: "qoldi",
     my_tests: "Mening testlarim", upload_test: "Test yuklash", history: "Ishga tushirishlar tarixi",
@@ -245,6 +251,9 @@ const T = {
     code_6: "The code is 6 digits", no_conn: "No connection to the server. Check your internet.",
     edit_name: "Edit name", fio: "Full name", vuz: "University", kafedra: "Department",
     edit_work: "Edit university / department", back_home: "Home",
+    support: "🆘 Support", support_hint: "Describe your problem or question — we'll reply in the bot chat.",
+    support_ph: "Your message…", support_send: "Send", support_sent: "Sent ✅ We'll reply in the bot.",
+    support_empty: "Write a message.",
     teacher: "Teacher", plan_free: "Free plan", plan_pro: "Pro until",
     test_running: "Test in progress", code: "code", time_left: "left",
     my_tests: "My tests", upload_test: "Upload test", history: "Launch history",
@@ -579,9 +588,32 @@ async function profileScreen() {
       <div class="kv"><span>${t("kafedra")}</span><span>${esc(ME.teacher_kafedra || "—")}</span></div>
       <button class="btn secondary" id="editwork">${t("edit_work")}</button>
     </div>` : ""}
+    <div class="item" id="support"><span class="ico">🆘</span><div class="grow">${t("support")}</div><span class="muted">›</span></div>
   `);
   on("#editname", "click", () => go(nameScreen));
   on("#editwork", "click", () => go(universityPickerScreen, { edit: true }));
+  on("#support", "click", () => go(supportScreen));
+}
+
+async function supportScreen() {
+  render(`
+    ${langBar()}
+    <h1>${t("support")}</h1>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 8px">${t("support_hint")}</p>
+      <textarea id="smsg" rows="5" placeholder="${t("support_ph")}" maxlength="2000"></textarea>
+      <button class="btn" id="ssend">${t("support_send")}</button>
+    </div>
+  `);
+  on("#ssend", "click", async () => {
+    const txt = (document.getElementById("smsg").value || "").trim();
+    if (!txt) { toast(t("support_empty")); return; }
+    const btn = document.getElementById("ssend"); btn.disabled = true;
+    try {
+      await api("/api/support", { json: { text: txt } });
+      haptic("success"); toast(t("support_sent")); back();
+    } catch (e) { haptic("error"); toast(e.message); btn.disabled = false; }
+  });
 }
 
 /* ================================================================ СТУДЕНТ */

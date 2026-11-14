@@ -358,6 +358,10 @@ class MafiaTargetIn(BaseModel):
     target_id: int
 
 
+class SupportIn(BaseModel):
+    text: str
+
+
 # ---------------------------------------------------------------- приложение
 
 def create_app() -> FastAPI:
@@ -791,6 +795,28 @@ def create_app() -> FastAPI:
     async def mafia_vote(game_id: int, player_id: int, body: MafiaTargetIn,
                          user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         return await mafiamod.cast_vote(db, game_id, player_id, user, body.target_id)
+
+    @app.post("/api/support")
+    async def support(body: SupportIn, user: User = Depends(current_user)):
+        """Обращение в поддержку: пересылаем сообщение админам в Telegram с данными пользователя."""
+        text = (body.text or "").strip()
+        if not text:
+            raise svc.ServiceError("Напишите сообщение.")
+        if bot_ref.bot is None:
+            raise svc.ServiceError("Поддержка временно недоступна, попробуйте позже.", 503)
+        uname = f"@{user.username}" if user.username else "—"
+        msg = (f"🆘 Обращение в поддержку\n"
+               f"От: {user.full_name or '—'} (id {user.id}, {uname})\n\n{text[:2000]}")
+        sent = False
+        for admin_id in settings.admin_ids:
+            try:
+                await bot_ref.bot.send_message(admin_id, msg, parse_mode=None)
+                sent = True
+            except Exception:
+                log.warning("support -> admin %s failed", admin_id)
+        if not sent:
+            raise svc.ServiceError("Не удалось отправить, попробуйте позже.", 502)
+        return {"ok": True}
 
     @app.get("/api/student/history")
     async def my_history(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):

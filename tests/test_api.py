@@ -129,6 +129,28 @@ async def test_quiz_endpoints_flow(client, monkeypatch):
     assert end["phase"] == "ended" and end["podium"][0]["name"] == "Игрок Один"
 
 
+async def test_support_forwards_to_admin(client, monkeypatch):
+    """Кнопка поддержки: сообщение уходит админам в Telegram с данными пользователя."""
+    from app import api as apimod
+
+    sent = []
+
+    class FakeBot:
+        async def send_message(self, chat_id, text, parse_mode=None):
+            sent.append((chat_id, text))
+
+    monkeypatch.setattr(apimod.bot_ref, "bot", FakeBot())
+
+    H = headers(960, name="Проблемный Юзер")
+    await client.post("/api/me/name", headers=H, json={"full_name": "Проблемный Юзер"})
+    # пустое сообщение — отказ
+    assert (await client.post("/api/support", headers=H, json={"text": "  "})).status_code == 400
+    r = await client.post("/api/support", headers=H, json={"text": "Не работает тест"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert sent and sent[0][0] == ADMIN_ID and "Не работает тест" in sent[0][1]
+    assert "id 960" in sent[0][1]
+
+
 async def test_lang_sync(client):
     """Язык из Mini App сохраняется в БД — общий с ботом."""
     H = headers(900)
