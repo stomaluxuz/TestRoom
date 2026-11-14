@@ -925,7 +925,7 @@ async function studentHome() {
       <button class="btn" id="join">${t("start_test")}</button>
     </div>
     ${payCard}
-    <div class="item" id="quizjoin"><span class="ico">🎮</span><div class="grow">${quizT().join_entry}</div><span class="muted">›</span></div>
+    <div class="item" id="games"><span class="ico">🎮</span><div class="grow">${quizT().games_entry}</div><span class="muted">›</span></div>
     <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
     ${extra}
     <h2>${t("my_results")}</h2>
@@ -936,7 +936,7 @@ async function studentHome() {
   code.addEventListener("input", () => { code.value = code.value.replace(/\D/g, "").slice(0, 6); });
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
   on("#join", "click", join);
-  on("#quizjoin", "click", () => go(quizJoinScreen));
+  on("#games", "click", () => go(gamesScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#topup", "click", () => {
     toast("Откройте чат бота и нажмите «💳 Пополнить баланс»");
@@ -1202,7 +1202,7 @@ async function teacherHome() {
     <div class="item" id="upload"><span class="ico">📤</span><div class="grow">${t("upload_test")}</div></div>
     <div class="item" id="history"><span class="ico">🕘</span><div class="grow">${t("history")}</div></div>
     <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
-    <div class="item" id="quiz"><span class="ico">🎮</span><div class="grow">${quizT().host_entry}</div><span class="muted">›</span></div>
+    <div class="item" id="games"><span class="ico">🎮</span><div class="grow">${quizT().games_entry}</div><span class="muted">›</span></div>
     <div class="item" id="aichat"><span class="ico">💬</span><div class="grow">${t("ai_assistant")}</div>${ME.is_pro_plus || ME.is_admin ? "" : `<span class="badge pro">Pro+</span>`}<span class="muted">›</span></div>
     <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
     <div class="item" id="libupload"><span class="ico">⬆️</span><div class="grow">${libT().upload}</div></div>
@@ -1221,7 +1221,7 @@ async function teacherHome() {
   on("#upload", "click", () => go(uploadScreen));
   on("#history", "click", () => go(historyScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
-  on("#quiz", "click", () => go(quizCreateScreen));
+  on("#games", "click", () => go(gamesScreen));
   on("#aichat", "click", () => go(aiChatScreen));
   on("#library", "click", () => go(libraryScreen));
   on("#libupload", "click", () => go(libraryUploadScreen));
@@ -2181,6 +2181,10 @@ const QUIZ = {
     end_host: "Игра окончена", join_title: "Войти в куиз", join_hint: "Введи код игры от преподавателя",
     join_btn: "Войти", score_word: "очков", pick_avatar: "Выбери аватар",
     mode_label: "Переход вопросов", mode_auto: "Авто", mode_manual: "Вручную", next_in: "Дальше через",
+    games_entry: "🎮 Игры", games_title: "Игры", games_hint: "Выбери игру",
+    quiz_name: "Куиз", quiz_desc: "Викторина как Kahoot: вопросы на скорость и таблица лидеров",
+    mafia_name: "Мафия", mafia_desc: "Ролевая игра на логику: город против мафии",
+    soon: "Скоро", in_dev: "В разработке — скоро добавим! 🔧",
   },
   uz: {
     host_entry: "🎮 Kuiz (Kahoot kabi)", join_entry: "🎮 Kuizga kirish",
@@ -2198,6 +2202,10 @@ const QUIZ = {
     end_host: "O'yin tugadi", join_title: "Kuizga kirish", join_hint: "O'qituvchidan olgan kodni kiriting",
     join_btn: "Kirish", score_word: "ball", pick_avatar: "Avatar tanlang",
     mode_label: "Savollar o'tishi", mode_auto: "Avto", mode_manual: "Qo'lda", next_in: "Keyingisi",
+    games_entry: "🎮 O'yinlar", games_title: "O'yinlar", games_hint: "O'yinni tanlang",
+    quiz_name: "Kuiz", quiz_desc: "Kahoot kabi viktorina: tezlikka savollar va peshqadamlar",
+    mafia_name: "Mafiya", mafia_desc: "Mantiqqa mo'ljallangan rolli o'yin: shahar mafiyaga qarshi",
+    soon: "Tez orada", in_dev: "Ishlanmoqda — tez orada qo'shamiz! 🔧",
   },
   en: {
     host_entry: "🎮 Quiz (Kahoot-style)", join_entry: "🎮 Join a quiz",
@@ -2215,6 +2223,10 @@ const QUIZ = {
     end_host: "Game over", join_title: "Join a quiz", join_hint: "Enter the game PIN from your teacher",
     join_btn: "Join", score_word: "pts", pick_avatar: "Pick your avatar",
     mode_label: "Question transitions", mode_auto: "Auto", mode_manual: "Manual", next_in: "Next in",
+    games_entry: "🎮 Games", games_title: "Games", games_hint: "Pick a game",
+    quiz_name: "Quiz", quiz_desc: "Kahoot-style quiz: fast answers and a leaderboard",
+    mafia_name: "Mafia", mafia_desc: "Social deduction game: town vs. mafia",
+    soon: "Soon", in_dev: "In development — coming soon! 🔧",
   },
 };
 const QUIZ_REVEAL_MS = 10000;  // сколько показывать правильный ответ до авто-перехода
@@ -2233,6 +2245,41 @@ function quizOptions(options, { correct = null, chosen = null, counts = null, ta
     return `<button class="${cls}" ${tappable ? `data-opt="${i}"` : "disabled"}>
       <span class="qshape">${QUIZ_SHAPE[i] || "●"}</span><span class="qtext">${esc(o)}</span>${cnt}</button>`;
   }).join("") + `</div>`;
+}
+
+// ---- хаб «Игры»: список игр (куиз, мафия…)
+function gamesScreen() {
+  const Q = quizT();
+  const isHost = ME.is_teacher || ME.is_admin;
+  const tile = (id, emoji, name, desc, ready) => `
+    <div class="item gtile" id="g-${id}">
+      <span class="ico">${emoji}</span>
+      <div class="grow"><div><b>${name}</b>${ready ? "" : ` <span class="badge">${Q.soon}</span>`}</div>
+        <div class="muted small">${desc}</div></div>
+      <span class="muted">›</span>
+    </div>`;
+  render(`
+    ${langBar()}
+    <h1>${Q.games_title}</h1>
+    <p class="muted small" style="margin:-6px 0 12px">${Q.games_hint}</p>
+    ${tile("quiz", "🎯", Q.quiz_name, Q.quiz_desc, true)}
+    ${tile("mafia", "🕵️", Q.mafia_name, Q.mafia_desc, false)}
+  `);
+  on("#g-quiz", "click", () => go(isHost ? quizCreateScreen : quizJoinScreen));
+  on("#g-mafia", "click", () => go(gameSoonScreen, { emoji: "🕵️", name: Q.mafia_name, desc: Q.mafia_desc }));
+}
+
+// ---- заглушка игры «в разработке»
+function gameSoonScreen({ emoji, name, desc }) {
+  const Q = quizT();
+  render(`
+    <div class="center">
+      <div class="qbig">${emoji}</div>
+      <h1>${name}</h1>
+      <p class="muted">${desc}</p>
+      <div class="card" style="margin-top:16px">${Q.in_dev}</div>
+    </div>
+  `);
 }
 
 // ---- учитель: создание куиза
