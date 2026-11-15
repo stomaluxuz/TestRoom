@@ -216,7 +216,9 @@ async def ai_chat(db: AsyncSession, user: User, messages: list[dict], lang: str 
     ]
     if not msgs or msgs[-1]["role"] != "user":
         raise ServiceError("Напишите вопрос.")
-    query = msgs[-1]["content"]
+    # Поиск по библиотеке: берём последние реплики пользователя (устойчивее к коротким уточнениям).
+    user_turns = [m["content"] for m in msgs if m["role"] == "user"]
+    query = " ".join(user_turns[-2:])[:1000]
     ctx = await library_context(db, query)
     await db.rollback()  # не держим соединение БД во время обращения к ИИ
 

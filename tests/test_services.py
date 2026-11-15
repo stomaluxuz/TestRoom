@@ -726,6 +726,15 @@ async def test_pro_plus_grant_and_gate(db):
         svc.require_pro_plus(u)
 
 
+def test_chat_context_block_strict():
+    """Строгий режим: без выдержек — «в библиотеке нет»; с выдержками — требуем источник."""
+    from app.ai import _chat_context_block
+    empty = _chat_context_block("")
+    assert "библиотек" in empty.lower() and "нет" in empty.lower()
+    block = _chat_context_block("[Источник: Атлас анатомии]\nкость челюсти…")
+    assert "ТОЛЬКО" in block and "Источник" in block
+
+
 async def test_ai_chat_requires_pro_plus(db):
     u = await make_student(db, 910)
     with pytest.raises(svc.ServiceError):
