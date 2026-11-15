@@ -133,6 +133,21 @@ async def test_night_auto_resolves_on_timer(db):
     assert st["phase"] == "day" and st["day"]["killed"] is None  # никого не убили
 
 
+async def test_force_next_and_day_time(db):
+    gid, users = await setup_game(db, 5)
+    await mafia.start(db, gid, users[0], day_seconds=90)
+    game = await db.get(MafiaGame, gid)
+    assert game.day_seconds == 90 and game.phase == "night"
+    # организатор принудительно завершает ночь, хотя таймер не истёк и не все сходили
+    await mafia.force_next(db, gid, users[0])
+    await db.refresh(game)
+    assert game.phase == "day"
+    # не организатор форсить не может
+    with pytest.raises(svc.ServiceError) as e:
+        await mafia.force_next(db, gid, users[1])
+    assert e.value.status == 403
+
+
 async def test_role_privacy(db):
     gid, users = await setup_game(db, 5)
     await mafia.start(db, gid, users[0])

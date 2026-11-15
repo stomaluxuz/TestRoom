@@ -358,6 +358,10 @@ class MafiaTargetIn(BaseModel):
     target_id: int
 
 
+class MafiaStartIn(BaseModel):
+    day_seconds: int | None = None  # время дневного обсуждения, задаёт организатор
+
+
 class SupportIn(BaseModel):
     text: str
 
@@ -773,13 +777,19 @@ def create_app() -> FastAPI:
         return await mafiamod.join(db, body.pin, user, body.emoji)
 
     @app.post("/api/mafia/{game_id}/start")
-    async def mafia_start(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
-        await mafiamod.start(db, game_id, user)
+    async def mafia_start(game_id: int, body: MafiaStartIn | None = None,
+                          user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        await mafiamod.start(db, game_id, user, body.day_seconds if body else None)
         return {"ok": True}
 
     @app.post("/api/mafia/{game_id}/end")
     async def mafia_end(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         await mafiamod.end_game(db, game_id, user)
+        return {"ok": True}
+
+    @app.post("/api/mafia/{game_id}/force")
+    async def mafia_force(game_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        await mafiamod.force_next(db, game_id, user)
         return {"ok": True}
 
     @app.get("/api/mafia/{game_id}/play")

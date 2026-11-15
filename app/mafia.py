@@ -155,7 +155,7 @@ async def _me(db: AsyncSession, game: MafiaGame, player_id: int, user: User) -> 
 
 # ------------------------------------------------ старт / завершение (организатор)
 
-async def start(db: AsyncSession, game_id: int, user: User) -> MafiaGame:
+async def start(db: AsyncSession, game_id: int, user: User, day_seconds: int | None = None) -> MafiaGame:
     game = await _get_game(db, game_id)
     if game.host_id != user.id:
         raise ServiceError("Начать игру может только организатор.", 403)
@@ -164,12 +164,26 @@ async def start(db: AsyncSession, game_id: int, user: User) -> MafiaGame:
     players = await _players(db, game.id)
     if len(players) < MIN_PLAYERS:
         raise ServiceError(f"Нужно минимум {MIN_PLAYERS} игрока.")
+    if day_seconds is not None:  # организатор задаёт время дневного обсуждения
+        game.day_seconds = max(15, min(int(day_seconds), 600))
     _assign_roles(players)
     game.round = 1
     game.phase = "night"
     game.phase_ends_at = utcnow() + timedelta(seconds=game.night_seconds)
     await db.commit()
     return game
+
+
+async def force_next(db: AsyncSession, game_id: int, user: User) -> MafiaGame:
+    """Организатор принудительно завершает текущую фазу, не дожидаясь таймера."""
+    game = await _get_game(db, game_id)
+    if game.host_id != user.id:
+        raise ServiceError("Пропустить фазу может только организатор.", 403)
+    if game.phase in ("lobby", "ended"):
+        return game
+    game.phase_ends_at = utcnow() - timedelta(seconds=1)  # делаем фазу «просроченной»
+    await db.commit()
+    return await _advance_if_due(db, game_id)
 
 
 async def end_game(db: AsyncSession, game_id: int, user: User) -> MafiaGame:

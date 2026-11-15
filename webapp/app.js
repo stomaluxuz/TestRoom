@@ -963,12 +963,14 @@ async function studentHome() {
     <h2>${t("my_results")}</h2>
     <div id="hist" class="muted small">${t("loading")}</div>
     <button class="link" id="profile">${t("profile")}</button>
+    <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
   `);
   const code = document.getElementById("code");
   code.addEventListener("input", () => { code.value = code.value.replace(/\D/g, "").slice(0, 6); });
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
   on("#join", "click", join);
   on("#games", "click", () => go(gamesScreen));
+  on("#homesupport", "click", () => go(supportScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#topup", "click", () => {
     toast("Откройте чат бота и нажмите «💳 Пополнить баланс»");
@@ -1243,6 +1245,7 @@ async function teacherHome() {
     ${ME.is_admin && !ME.acting_as ? `<div class="item" id="admin"><span class="ico">🛠</span><div class="grow">${t("admin_panel")}</div><span class="muted">›</span></div>` : ""}
     ${ME.is_admin || ME.acting_as ? "" : `<div class="item" id="torole"><span class="ico">🎓</span><div class="grow">${t("become_student")}</div></div>`}
     <p class="muted small">${t("upload_via_bot")}</p>
+    <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
   `);
   if (a) {
     on("#active", "click", () => go(liveScreen, { id: a.id }));
@@ -1261,6 +1264,7 @@ async function teacherHome() {
   on("#student", "click", () => go(studentHome));
   on("#admin", "click", () => go(adminScreen));
   on("#torole", "click", switchToStudent);
+  on("#homesupport", "click", () => go(supportScreen));
 }
 
 // Список предметов-папок. Внутри каждой — свои тесты (экран subjectScreen).
@@ -2580,6 +2584,7 @@ const MAFIA = {
     win_town: "🏆 Победил город!", win_mafia: "🔪 Победила мафия!", roles_reveal: "Кто кем был",
     end_btn: "Завершить игру", alive_word: "в игре", dead_word: "выбыл", waiting_next: "Ждём следующую фазу…",
     r_mafia: "Мафия", r_civilian: "Мирный житель", r_commissar: "Комиссар", r_doctor: "Доктор",
+    day_time: "Время обсуждения", force_next: "⏭ Дальше",
   },
   uz: {
     menu_title: "Mafiya", create_btn: "➕ O'yin yaratish", join_label: "…yoki kod bilan kirish",
@@ -2597,6 +2602,7 @@ const MAFIA = {
     win_town: "🏆 Shahar g'olib!", win_mafia: "🔪 Mafiya g'olib!", roles_reveal: "Kim kim edi",
     end_btn: "O'yinni yakunlash", alive_word: "o'yinda", dead_word: "chiqdi", waiting_next: "Keyingi bosqichni kutyapmiz…",
     r_mafia: "Mafiya", r_civilian: "Tinch aholi", r_commissar: "Komissar", r_doctor: "Shifokor",
+    day_time: "Muhokama vaqti", force_next: "⏭ Keyingisi",
   },
   en: {
     menu_title: "Mafia", create_btn: "➕ Create game", join_label: "…or join by PIN",
@@ -2614,6 +2620,7 @@ const MAFIA = {
     win_town: "🏆 Town wins!", win_mafia: "🔪 Mafia wins!", roles_reveal: "Who was who",
     end_btn: "End game", alive_word: "in", dead_word: "out", waiting_next: "Waiting for the next phase…",
     r_mafia: "Mafia", r_civilian: "Civilian", r_commissar: "Detective", r_doctor: "Doctor",
+    day_time: "Discussion time", force_next: "⏭ Next",
   },
 };
 function mafiaT() { return MAFIA[LANG] || MAFIA.ru; }
@@ -2671,7 +2678,7 @@ function mafiaRoster(d) {
 // ---- игровой экран «Мафии»
 async function mafiaPlayScreen({ game_id, player_id }) {
   const M = mafiaT();
-  let deadline = 0, busy = false;
+  let deadline = 0, busy = false, lastSig = "", dayPick = 60;
   async function post(path, target) {
     if (busy) return; busy = true; haptic("success");
     try { await api(`/api/mafia/${game_id}/${path}?player_id=${player_id}`, { json: { target_id: target } }); }
@@ -2681,20 +2688,33 @@ async function mafiaPlayScreen({ game_id, player_id }) {
   async function load() {
     let d;
     try { d = await api(`/api/mafia/${game_id}/play?player_id=${player_id}`); } catch (e) { return; }
+    const timed = d.phase === "night" || d.phase === "day" || d.phase === "vote";
+    if (timed) deadline = Date.now() + (d.remaining_ms || 0);  // синхронизируем таймер каждый опрос
+    // Перерисовываем ТОЛЬКО при реальном изменении состояния — иначе экран мигает (таймер крутит отдельный интервал).
+    const sig = JSON.stringify({ ...d, remaining_ms: 0 });
+    if (sig === lastSig) return;
+    lastSig = sig;
     const scroll = window.scrollY;
-    if (d.phase === "night" || d.phase === "day" || d.phase === "vote") deadline = Date.now() + (d.remaining_ms || 0);
-    const timer = (d.phase === "night" || d.phase === "day" || d.phase === "vote")
-      ? `<div class="mtimer"><span id="mt"></span></div>` : "";
+    const timer = timed ? `<div class="mtimer"><span id="mt"></span></div>` : "";
+    const forceBtn = (d.is_host && timed) ? `<button class="btn secondary" id="mforce">${M.force_next}</button>` : "";
     const endBtn = (d.is_host && d.phase !== "ended") ? `<button class="link danger" id="mend" style="margin-top:14px">${M.end_btn}</button>` : "";
     let html = "";
     if (d.phase === "lobby") {
+      const daySel = d.is_host ? `
+        <label class="muted small" style="display:block;margin-top:8px">${M.day_time}</label>
+        <select id="mday" class="field">
+          <option value="30"${dayPick === 30 ? " selected" : ""}>30s</option>
+          <option value="60"${dayPick === 60 ? " selected" : ""}>60s</option>
+          <option value="90"${dayPick === 90 ? " selected" : ""}>90s</option>
+          <option value="120"${dayPick === 120 ? " selected" : ""}>120s</option>
+        </select>` : "";
       html = `
         <p class="muted small" style="text-align:center;margin:0">${mafiaT().pin_title}</p>
         <div class="big-code">${d.pin.slice(0, 3)} ${d.pin.slice(3)}</div>
         <p class="muted small" style="text-align:center">${d.players_count} ${M.players_word}</p>
         <div class="chips">${d.players.map(p => `<span class="chip">${p.emoji} ${esc(p.name)}</span>`).join("")}</div>
         ${d.is_host
-          ? `<button class="btn" id="mstart" ${d.can_start ? "" : "disabled"}>${M.start_btn}</button>
+          ? `${daySel}<button class="btn" id="mstart" ${d.can_start ? "" : "disabled"}>${M.start_btn}</button>
              ${d.can_start ? "" : `<p class="muted small" style="text-align:center">${M.need_more.replace("{n}", d.min_players)}</p>`}`
           : `<p class="muted" style="text-align:center">${M.lobby_wait}</p>`}`;
     } else if (d.phase === "ended") {
@@ -2731,11 +2751,18 @@ async function mafiaPlayScreen({ game_id, player_id }) {
             `<button class="mtile ${d.vote.voted === p.id ? "sel" : ""}" data-t="${p.id}">${p.emoji} <span class="ell">${esc(p.name)}</span>${d.vote.tally[p.id] ? `<b class="mvotes">${d.vote.tally[p.id]}</b>` : ""}</button>`).join("") + `</div>`;
       }
       const myrole = `<div class="mrole r-${d.me.role}">${MAFIA_ROLE_EMOJI[d.me.role]} ${M.you_are}: <b>${mafiaRoleName(d.me.role)}</b></div>`;
-      html = `<h2 class="tc" style="margin:4px 0">${head}</h2>${timer}${myrole}${body}`;
+      html = `<h2 class="tc" style="margin:4px 0">${head}</h2>${timer}${myrole}${body}${forceBtn}`;
     }
     $app.innerHTML = html + endBtn;
     window.scrollTo(0, scroll);
-    on("#mstart", "click", async () => { try { await api(`/api/mafia/${game_id}/start`, { method: "POST" }); } catch (e) { toast(e.message); } load(); });
+    const mday = document.getElementById("mday");
+    if (mday) mday.addEventListener("change", () => { dayPick = +mday.value; });
+    on("#mstart", "click", async () => {
+      const ds = mday ? +mday.value : undefined;
+      try { await api(`/api/mafia/${game_id}/start`, { json: ds ? { day_seconds: ds } : {} }); }
+      catch (e) { toast(e.message); } load();
+    });
+    on("#mforce", "click", async () => { try { await api(`/api/mafia/${game_id}/force`, { method: "POST" }); } catch (e) { toast(e.message); } load(); });
     on("#mhome", "click", home);
     on("#mend", "click", async () => { if (!confirm(M.end_btn + "?")) return; try { await api(`/api/mafia/${game_id}/end`, { method: "POST" }); } catch (e) { toast(e.message); } load(); });
     onAll(".mtargets .mtile", "click", el => post(d.phase === "vote" ? "vote" : "action", +el.dataset.t));
