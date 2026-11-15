@@ -168,12 +168,11 @@ label { display: block; margin-top: 12px; font-size: 13px; color: var(--hint); }
 .kv span:first-child { color: var(--hint); }
 .actbar.hidden { display: none; }
 .credit { width: 100%; margin: 0 auto; padding: 10px 14px 30px; text-align: center;
-  color: var(--hint); font-size: 13px; }
+  color: var(--hint); font-size: 13px; display: none; }
 .credit a { color: var(--link); text-decoration: none; font-weight: 600; }
 .credit a:active { opacity: .7; }
-/* Во время прохождения теста прячем подпись-ссылку (Instagram), чтобы студент
-   случайно не нажал и не вышел из теста. */
-body.testing .credit { display: none; }
+/* Ссылка на создателя (Instagram) — только на главном экране. */
+body.home .credit { display: block; }
 
 /* Форма «Презентация (ИИ)» */
 .langpick { display: flex; gap: 8px; margin: 4px 0 2px; }

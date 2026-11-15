@@ -381,7 +381,8 @@ async function api(path, opts = {}) {
 }
 
 function render(html) {
-  document.body.classList.remove("testing");  // по умолчанию подпись-ссылка видна
+  document.body.classList.remove("testing");
+  document.body.classList.remove("home");  // ссылка на создателя — только на главном (её добавляют home-экраны)
   $app.innerHTML = html; window.scrollTo(0, 0); bindLang();
 }
 function on(sel, ev, fn) { const el = $app.querySelector(sel); if (el) el.addEventListener(ev, fn); }
@@ -963,6 +964,7 @@ async function studentHome() {
     <button class="link" id="profile">${t("profile")}</button>
     <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
   `);
+  document.body.classList.add("home");  // показываем ссылку на создателя только здесь
   const code = document.getElementById("code");
   code.addEventListener("input", () => { code.value = code.value.replace(/\D/g, "").slice(0, 6); });
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
@@ -1245,6 +1247,7 @@ async function teacherHome() {
     <p class="muted small">${t("upload_via_bot")}</p>
     <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
   `);
+  document.body.classList.add("home");  // показываем ссылку на создателя только здесь
   if (a) {
     on("#active", "click", () => go(liveScreen, { id: a.id }));
     const end = Date.now() + a.seconds_left * 1000;
