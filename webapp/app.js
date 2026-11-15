@@ -588,11 +588,9 @@ async function profileScreen() {
       <div class="kv"><span>${t("kafedra")}</span><span>${esc(ME.teacher_kafedra || "—")}</span></div>
       <button class="btn secondary" id="editwork">${t("edit_work")}</button>
     </div>` : ""}
-    <div class="item" id="support"><span class="ico">🆘</span><div class="grow">${t("support")}</div><span class="muted">›</span></div>
   `);
   on("#editname", "click", () => go(nameScreen));
   on("#editwork", "click", () => go(universityPickerScreen, { edit: true }));
-  on("#support", "click", () => go(supportScreen));
 }
 
 async function supportScreen() {
