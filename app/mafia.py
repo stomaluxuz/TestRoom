@@ -164,8 +164,8 @@ async def start(db: AsyncSession, game_id: int, user: User, day_seconds: int | N
     players = await _players(db, game.id)
     if len(players) < MIN_PLAYERS:
         raise ServiceError(f"Нужно минимум {MIN_PLAYERS} игрока.")
-    if day_seconds is not None:  # организатор задаёт время дневного обсуждения
-        game.day_seconds = max(15, min(int(day_seconds), 600))
+    if day_seconds is not None:  # организатор задаёт время дневного обсуждения (до 60 минут)
+        game.day_seconds = max(15, min(int(day_seconds), 3600))
     _assign_roles(players)
     game.round = 1
     game.phase = "night"

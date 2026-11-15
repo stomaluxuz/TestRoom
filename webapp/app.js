@@ -2585,7 +2585,7 @@ const MAFIA = {
     win_town: "🏆 Победил город!", win_mafia: "🔪 Победила мафия!", roles_reveal: "Кто кем был",
     end_btn: "Завершить игру", alive_word: "в игре", dead_word: "выбыл", waiting_next: "Ждём следующую фазу…",
     r_mafia: "Мафия", r_civilian: "Мирный житель", r_commissar: "Комиссар", r_doctor: "Доктор",
-    day_time: "Время обсуждения", force_next: "⏭ Дальше",
+    day_time: "Время обсуждения (минут)", min_ph: "напр. 3", force_next: "⏭ Дальше",
   },
   uz: {
     menu_title: "Mafiya", create_btn: "➕ O'yin yaratish", join_label: "…yoki kod bilan kirish",
@@ -2603,7 +2603,7 @@ const MAFIA = {
     win_town: "🏆 Shahar g'olib!", win_mafia: "🔪 Mafiya g'olib!", roles_reveal: "Kim kim edi",
     end_btn: "O'yinni yakunlash", alive_word: "o'yinda", dead_word: "chiqdi", waiting_next: "Keyingi bosqichni kutyapmiz…",
     r_mafia: "Mafiya", r_civilian: "Tinch aholi", r_commissar: "Komissar", r_doctor: "Shifokor",
-    day_time: "Muhokama vaqti", force_next: "⏭ Keyingisi",
+    day_time: "Muhokama vaqti (daqiqa)", min_ph: "masalan 3", force_next: "⏭ Keyingisi",
   },
   en: {
     menu_title: "Mafia", create_btn: "➕ Create game", join_label: "…or join by PIN",
@@ -2621,7 +2621,7 @@ const MAFIA = {
     win_town: "🏆 Town wins!", win_mafia: "🔪 Mafia wins!", roles_reveal: "Who was who",
     end_btn: "End game", alive_word: "in", dead_word: "out", waiting_next: "Waiting for the next phase…",
     r_mafia: "Mafia", r_civilian: "Civilian", r_commissar: "Detective", r_doctor: "Doctor",
-    day_time: "Discussion time", force_next: "⏭ Next",
+    day_time: "Discussion time (minutes)", min_ph: "e.g. 3", force_next: "⏭ Next",
   },
 };
 function mafiaT() { return MAFIA[LANG] || MAFIA.ru; }
@@ -2679,7 +2679,7 @@ function mafiaRoster(d) {
 // ---- игровой экран «Мафии»
 async function mafiaPlayScreen({ game_id, player_id }) {
   const M = mafiaT();
-  let deadline = 0, busy = false, lastSig = "", dayPick = 60;
+  let deadline = 0, busy = false, lastSig = "", dayPick = "";  // dayPick — минуты (пусто = по умолчанию)
   async function post(path, target) {
     if (busy) return; busy = true; haptic("success");
     try { await api(`/api/mafia/${game_id}/${path}?player_id=${player_id}`, { json: { target_id: target } }); }
@@ -2703,12 +2703,8 @@ async function mafiaPlayScreen({ game_id, player_id }) {
     if (d.phase === "lobby") {
       const daySel = d.is_host ? `
         <label class="muted small" style="display:block;margin-top:8px">${M.day_time}</label>
-        <select id="mday" class="field">
-          <option value="30"${dayPick === 30 ? " selected" : ""}>30s</option>
-          <option value="60"${dayPick === 60 ? " selected" : ""}>60s</option>
-          <option value="90"${dayPick === 90 ? " selected" : ""}>90s</option>
-          <option value="120"${dayPick === 120 ? " selected" : ""}>120s</option>
-        </select>` : "";
+        <input id="mday" class="field" type="number" min="1" max="60" inputmode="numeric"
+               placeholder="${M.min_ph}" value="${dayPick}">` : "";
       html = `
         <p class="muted small" style="text-align:center;margin:0">${mafiaT().pin_title}</p>
         <div class="big-code">${d.pin.slice(0, 3)} ${d.pin.slice(3)}</div>
@@ -2757,9 +2753,10 @@ async function mafiaPlayScreen({ game_id, player_id }) {
     $app.innerHTML = html + endBtn;
     window.scrollTo(0, scroll);
     const mday = document.getElementById("mday");
-    if (mday) mday.addEventListener("change", () => { dayPick = +mday.value; });
+    if (mday) mday.addEventListener("input", () => { dayPick = mday.value; });  // сохраняем ввод между опросами
     on("#mstart", "click", async () => {
-      const ds = mday ? +mday.value : undefined;
+      const mins = mday ? parseInt(mday.value, 10) : NaN;
+      const ds = mins > 0 ? Math.min(mins, 60) * 60 : undefined;  // минуты → секунды (пусто = по умолчанию)
       try { await api(`/api/mafia/${game_id}/start`, { json: ds ? { day_seconds: ds } : {} }); }
       catch (e) { toast(e.message); } load();
     });
