@@ -323,6 +323,34 @@ async def detect_book_meta(sample_text: str) -> str:
     return "" if is_no_title(title) else title[:200]
 
 
+async def classify_book_subject(sample_text: str, subjects: list[str]) -> str:
+    """По началу книги определяет, к какому предмету из списка она относится.
+    Возвращает точное название из списка или '' (не подошёл / ИИ недоступен)."""
+    sample = " ".join((sample_text or "").split())[:3000]
+    if not sample or not subjects or not settings.anthropic_api_key:
+        return ""
+    lst = "\n".join(f"- {s}" for s in subjects)
+    prompt = (
+        "Ниже — начало учебной книги/материала. Определи, к какому ПРЕДМЕТУ из списка он относится. "
+        "Верни ТОЛЬКО одно название из списка, точно как написано. Если не подходит ни один — "
+        "ответь РОВНО одним словом: НЕТ.\n\n"
+        f"Список предметов:\n{lst}\n\nНачало материала:\n{sample}"
+    )
+    try:
+        out = await _ask(
+            "Ты точно относишь учебный материал к предмету. Отвечай только названием из списка или словом НЕТ.",
+            prompt, max_tokens=40,
+        )
+    except Exception:
+        return ""
+    out = " ".join((out or "").split()).strip('"«».')
+    low = out.lower()
+    for s in subjects:  # сверяем с реальными названиями (без учёта регистра)
+        if low == s.lower():
+            return s
+    return ""
+
+
 async def chat_answer(messages: list[dict], lang: str = "ru", context: str = "") -> str:
     """Многоходовый ответ ИИ-ассистента (чат). messages — [{role: user/assistant, content}].
     context — выдержки из библиотеки (RAG), если нашлись."""

@@ -1906,24 +1906,54 @@ LIBRARY_TEXT_EXTRACT_MAX = int(_os.getenv("LIBRARY_EXTRACT_MAX_MB", "60")) * 102
 LIBRARY_TEXT_STORE_MAX = 4_000_000  # максимум символов текста в БД (чтобы не раздувать базу/бэкап)
 
 
+_DEFAULT_SUBJECT_NAMES = ("разное", "прочее", "boshqa", "other")
+
+
+async def _auto_pick_subject(db: AsyncSession, text: str) -> int:
+    """ИИ выбирает предмет для книги из существующих; если не подошёл — «Разное» (создаст при нужде)."""
+    from . import ai
+
+    rows = [(s.id, s.name) for s in await db.scalars(
+        select(LibrarySubject).order_by(LibrarySubject.position, LibrarySubject.name))]
+    await db.rollback()  # освобождаем соединение перед обращением к ИИ
+    names = [n for _, n in rows]
+    picked = await ai.classify_book_subject(text, names) if names else ""
+    for sid, name in rows:
+        if name == picked:
+            return sid
+    for sid, name in rows:  # запасной — существующий «Разное»/«Прочее»
+        if name.strip().lower() in _DEFAULT_SUBJECT_NAMES:
+            return sid
+    pos = await db.scalar(select(func.coalesce(func.max(LibrarySubject.position), 0)))
+    s = LibrarySubject(name="Разное", position=(pos or 0) + 1)
+    db.add(s)
+    await db.commit()
+    return s.id
+
+
 async def add_library_doc_from_path(
-    db: AsyncSession, teacher: User, subject_id: int, title: str, filename: str,
+    db: AsyncSession, teacher: User, subject_id: int | None, title: str, filename: str,
     content_type: str | None, src_path: str, size: int,
 ) -> LibraryDoc:
-    """Создать материал из уже сохранённого на диске файла (память не держим). На модерацию."""
+    """Создать материал из уже сохранённого на диске файла (память не держим). На модерацию.
+    subject_id=None — предмет определит ИИ по содержимому (массовая загрузка админом)."""
     import os
 
     from .parsers import extract_document_text_path
 
+    auto_sort = subject_id is None
     try:
         if not teacher.is_teacher:
             raise ServiceError("Загружать материалы в библиотеку могут только преподаватели.", 403)
-        subj = await db.get(LibrarySubject, subject_id)
-        if subj is None:
-            raise ServiceError("Предмет не найден.", 404)
+        if not auto_sort:
+            subj = await db.get(LibrarySubject, subject_id)
+            if subj is None:
+                raise ServiceError("Предмет не найден.", 404)
         title = " ".join((title or "").split())
-        if not title:
+        if not title and not auto_sort:
             raise ServiceError("Введите название материала.")
+        if not title:  # авто: временное имя из файла (настоящее название определит _enrich)
+            title = os.path.splitext(os.path.basename(filename or "file"))[0][:300] or "Материал"
         if not (filename or "").lower().endswith(LIBRARY_EXT):
             raise ServiceError("Поддерживаются файлы .pdf, .docx и .txt.")
     except Exception:
@@ -1955,6 +1985,8 @@ async def add_library_doc_from_path(
                 ocr_status = "pending"
         except Exception:
             ocr_status = None
+    if auto_sort:  # ИИ раскладывает книгу по предмету (массовая загрузка)
+        subject_id = await _auto_pick_subject(db, text)
     doc = LibraryDoc(
         subject_id=subject_id, title=title[:300], filename=(filename or "file")[:300],
         content_type=content_type, size=size, path="", text=text,

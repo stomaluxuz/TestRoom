@@ -18,7 +18,7 @@ from . import quiz as quizmod
 from . import services as svc
 from .auth import AuthError, validate_init_data
 from .config import settings
-from .models import User
+from .models import LibrarySubject, User
 from .parsers import ParseFailed, parse_file
 from .universities import UNIVERSITIES
 
@@ -219,6 +219,43 @@ async def _run_song(uid, target_id, topic, style, lang, charged):
                 await bot_ref.bot.send_message(target_id, msg, parse_mode=None)
             except Exception:
                 pass
+
+
+async def _run_bulk_import(admin_id: int, saved: list[dict]):
+    """Фоновая массовая загрузка книг: каждую раскладываем по предмету (ИИ) и шлём админу отчёт."""
+    import os
+    from collections import Counter
+
+    by_subject: Counter = Counter()
+    failed: list[str] = []
+    for item in saved:
+        try:
+            async with dbmod.SessionLocal() as db:
+                admin = await svc.get_or_create_user(db, admin_id)
+                doc = await svc.add_library_doc_from_path(
+                    db, admin, None, "", item["filename"], item["content_type"], item["tmp"], item["size"]
+                )
+                subj = await db.get(LibrarySubject, doc.subject_id)
+                by_subject[subj.name if subj else "?"] += 1
+        except Exception:
+            log.exception("Массовая загрузка: файл не удалось обработать: %s", item.get("filename"))
+            failed.append(item.get("filename") or "файл")
+            try:
+                os.remove(item["tmp"])
+            except OSError:
+                pass
+    total = sum(by_subject.values())
+    msg = f"📚 Массовая загрузка завершена: добавлено {total} книг (на модерацию)."
+    if by_subject:
+        msg += "\nПо предметам:\n" + "\n".join(f"• {name}: {n}" for name, n in by_subject.most_common())
+    if failed:
+        msg += f"\nНе удалось: {len(failed)} — " + ", ".join(failed[:10])
+    msg += "\nОткройте библиотеку в админке и подтвердите материалы."
+    if bot_ref.bot is not None:
+        try:
+            await bot_ref.bot.send_message(admin_id, msg, parse_mode=None)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------- схемы запросов
@@ -1249,6 +1286,41 @@ def create_app() -> FastAPI:
     async def a_lib_subj_delete(subject_id: int, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
         await svc.delete_library_subject(db, subject_id)
         return {"ok": True}
+
+    @app.post("/api/admin/library/bulk_upload")
+    async def a_lib_bulk(files: list[UploadFile] = File(...), admin: User = Depends(admin_user)):
+        """Массовая загрузка книг: принимаем пачку файлов, раскладываем по предметам (ИИ) в фоне,
+        отчёт приходит админу в бот. Файлы — на модерацию, как обычная загрузка."""
+        import os
+        import tempfile
+
+        os.makedirs(settings.library_dir, exist_ok=True)
+        saved: list[dict] = []
+        for f in files[:30]:  # разумный предел на один заход
+            fd, tmp = tempfile.mkstemp(dir=settings.library_dir)
+            size = 0
+            try:
+                with os.fdopen(fd, "wb") as out:
+                    while True:
+                        chunk = await f.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > MAX_LIBRARY_UPLOAD:
+                            raise svc.ServiceError(f"Файл «{f.filename}» больше 100 МБ.")
+                        out.write(chunk)
+            except BaseException:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                raise
+            saved.append({"tmp": tmp, "filename": f.filename or "file",
+                          "content_type": f.content_type, "size": size})
+        if not saved:
+            raise svc.ServiceError("Не выбрано ни одного файла.")
+        asyncio.create_task(_run_bulk_import(admin.id, saved))
+        return {"ok": True, "count": len(saved), "queued": True}
 
     # ------------------------------------------------ сам Mini App
     @app.get("/")
