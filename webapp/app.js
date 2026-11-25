@@ -454,15 +454,16 @@ function home() {
   go(ME.is_teacher ? teacherHome : studentHome);
 }
 function updateBack() {
-  if (!tg) return;
-  if (navStack.length > 1 && !attemptCtx) tg.BackButton.show(); else tg.BackButton.hide();
+  // BackButton есть не во всех клиентах (часть версий Telegram Desktop) — без защиты падало всё приложение.
+  if (!tg || !tg.BackButton) return;
+  try { if (navStack.length > 1 && !attemptCtx) tg.BackButton.show(); else tg.BackButton.hide(); } catch (e) {}
 }
-if (tg) tg.BackButton.onClick(back);
+try { if (tg && tg.BackButton) tg.BackButton.onClick(back); } catch (e) {}
 
 /* ---------------------------------------------------------------- старт */
 
 async function boot() {
-  if (tg) { tg.ready(); tg.expand(); try { tg.disableVerticalSwipes(); } catch (e) {} }
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} try { tg.disableVerticalSwipes(); } catch (e) {} }
   if (!(tg && tg.initData) && !devUser) {
     render(`<div class="center"><h1>TestRoom</h1><p class="muted">${t("open_via_bot")}</p></div>`);
     return;
