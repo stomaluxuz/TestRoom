@@ -9,7 +9,12 @@
   --danger: #e5484d;
   --ok: #2fa84f;
   --warn: #d98a00;
-  --radius: 12px;
+  --radius: 14px;
+  /* Фирменный акцент TestRoom — независим от темы Telegram (единый бренд в любой теме). */
+  --brand: #0ea47f;
+  --brand-2: #0b7d63;
+  --brand-soft: rgba(14,164,127,.12);
+  --card-shadow: 0 1px 3px rgba(0,0,0,.05), 0 6px 18px rgba(0,0,0,.04);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; background: var(--bg2); color: var(--text);
@@ -265,3 +270,45 @@ body.home .credit { display: block; }
 .mrow .grow { flex: 1; min-width: 0; }
 .tc { text-align: center; }
 @media (max-width: 360px) { .mtargets { grid-template-columns: 1fr; } }
+
+/* ===================== редизайн: бренд, дашборд, нижнее меню ===================== */
+/* Фирменные кнопки/карточки — единый вид в любой теме Telegram */
+.btn { background: var(--brand); color: #fff; box-shadow: 0 6px 16px rgba(14,164,127,.25); }
+.btn.secondary { background: var(--bg); color: var(--brand); border: 1px solid var(--bg2); box-shadow: none; }
+.btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); box-shadow: none; }
+.card, .item { box-shadow: var(--card-shadow); }
+#app { padding-bottom: 96px; }
+
+/* Шапка-дашборд */
+.hero { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
+  border-radius: 20px; padding: 18px 18px 16px; margin-bottom: 14px; box-shadow: 0 10px 26px rgba(11,125,99,.3); }
+.hero .hi { font-size: 14px; opacity: .9; }
+.hero .nm { font-size: 24px; font-weight: 700; margin: 2px 0 10px; }
+.hero .streak { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.18);
+  border-radius: 999px; padding: 5px 12px; font-size: 14px; font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 14px; }
+.tile { background: rgba(255,255,255,.15); border-radius: 14px; padding: 10px 8px; text-align: center; }
+.tile b { display: block; font-size: 22px; font-weight: 700; line-height: 1.1; }
+.tile span { font-size: 11px; opacity: .9; }
+
+/* Сетка быстрых действий */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; }
+.gcard { background: var(--bg); border-radius: 16px; padding: 14px; cursor: pointer; box-shadow: var(--card-shadow);
+  display: flex; flex-direction: column; gap: 6px; min-height: 92px; }
+.gcard .gi { font-size: 26px; }
+.gcard .gt { font-weight: 600; font-size: 14px; line-height: 1.2; }
+.gcard .gs { font-size: 12px; color: var(--hint); }
+.gcard:active { transform: scale(.98); }
+
+/* Нижнее таб-меню */
+#tabbar { position: fixed; left: 0; right: 0; bottom: 0; display: none; z-index: 50;
+  background: var(--bg); border-top: 1px solid var(--bg2);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+#tabbar.on { display: flex; }
+#tabbar .tab { flex: 1; background: none; border: 0; cursor: pointer; color: var(--hint);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; font: inherit; }
+#tabbar .tab .ti { font-size: 20px; line-height: 1; }
+#tabbar .tab .tl { font-size: 11px; }
+#tabbar .tab.on { color: var(--brand); }
+body.hastabs #app { padding-bottom: 112px; }
+body.hastabs .credit { margin-bottom: 72px; }  /* ссылка-создатель не прячется под таб-меню */

@@ -62,6 +62,10 @@ const T = {
     support: "🆘 Поддержка", support_hint: "Опишите проблему или вопрос — мы ответим в чате бота.",
     support_ph: "Ваше сообщение…", support_send: "Отправить", support_sent: "Отправлено ✅ Мы ответим в боте.",
     support_empty: "Напишите сообщение.",
+    tab_home: "Главная", tab_games: "Игры", tab_library: "Библиотека", tab_profile: "Профиль",
+    greet_morning: "Доброе утро", greet_day: "Добрый день", greet_evening: "Добрый вечер", greet_night: "Доброй ночи",
+    streak_days: "дн.", st_solved: "решено", st_avg: "средний", st_mistakes: "ошибок",
+    quick_title: "Создавай и учись", results_title: "Мои результаты",
     teacher: "Преподаватель", plan_free: "Бесплатный тариф", plan_pro: "Pro до",
     test_running: "Идёт тест", code: "код", time_left: "осталось",
     my_tests: "Мои тесты", upload_test: "Загрузить тест", history: "История запусков",
@@ -158,6 +162,10 @@ const T = {
     support: "🆘 Yordam", support_hint: "Muammo yoki savolni yozing — bot chatida javob beramiz.",
     support_ph: "Xabaringiz…", support_send: "Yuborish", support_sent: "Yuborildi ✅ Botda javob beramiz.",
     support_empty: "Xabar yozing.",
+    tab_home: "Asosiy", tab_games: "O'yinlar", tab_library: "Kutubxona", tab_profile: "Profil",
+    greet_morning: "Xayrli tong", greet_day: "Xayrli kun", greet_evening: "Xayrli kech", greet_night: "Xayrli tun",
+    streak_days: "kun", st_solved: "yechildi", st_avg: "o'rtacha", st_mistakes: "xato",
+    quick_title: "Yarating va o'rganing", results_title: "Mening natijalarim",
     teacher: "O'qituvchi", plan_free: "Bepul tarif", plan_pro: "Pro:",
     test_running: "Test ketmoqda", code: "kod", time_left: "qoldi",
     my_tests: "Mening testlarim", upload_test: "Test yuklash", history: "Ishga tushirishlar tarixi",
@@ -254,6 +262,10 @@ const T = {
     support: "🆘 Support", support_hint: "Describe your problem or question — we'll reply in the bot chat.",
     support_ph: "Your message…", support_send: "Send", support_sent: "Sent ✅ We'll reply in the bot.",
     support_empty: "Write a message.",
+    tab_home: "Home", tab_games: "Games", tab_library: "Library", tab_profile: "Profile",
+    greet_morning: "Good morning", greet_day: "Good afternoon", greet_evening: "Good evening", greet_night: "Good night",
+    streak_days: "d", st_solved: "solved", st_avg: "average", st_mistakes: "mistakes",
+    quick_title: "Create & learn", results_title: "My results",
     teacher: "Teacher", plan_free: "Free plan", plan_pro: "Pro until",
     test_running: "Test in progress", code: "code", time_left: "left",
     my_tests: "My tests", upload_test: "Upload test", history: "Launch history",
@@ -383,7 +395,39 @@ async function api(path, opts = {}) {
 function render(html) {
   document.body.classList.remove("testing");
   document.body.classList.remove("home");  // ссылка на создателя — только на главном (её добавляют home-экраны)
+  hideTabs();  // нижнее меню — только на корневых экранах (их функции сами его показывают)
   $app.innerHTML = html; window.scrollTo(0, 0); bindLang();
+}
+
+/* нижнее таб-меню */
+const TABS = [
+  { id: "home", ico: "🏠", go: () => home() },
+  { id: "games", ico: "🎮", go: () => goTab(gamesScreen) },
+  { id: "library", ico: "📚", go: () => goTab(libraryScreen) },
+  { id: "profile", ico: "👤", go: () => goTab(profileScreen) },
+];
+function tabLabel(id) {
+  return { home: t("tab_home"), games: t("tab_games"), library: t("tab_library"), profile: t("tab_profile") }[id];
+}
+function showTabs(active) {
+  const bar = document.getElementById("tabbar");
+  if (!bar) return;
+  document.body.classList.add("hastabs");
+  bar.classList.add("on");
+  bar.innerHTML = TABS.map(x => `<button class="tab ${x.id === active ? "on" : ""}" data-tab="${x.id}">
+    <span class="ti">${x.ico}</span><span class="tl">${tabLabel(x.id)}</span></button>`).join("");
+  bar.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
+    const tb = TABS.find(x => x.id === b.dataset.tab); if (tb) { haptic("light"); tb.go(); }
+  }));
+}
+function hideTabs() {
+  const bar = document.getElementById("tabbar");
+  document.body.classList.remove("hastabs");
+  if (bar) bar.classList.remove("on");
+}
+function goTab(screen, params = {}) {  // переход по вкладке — с «корня» (назад не нужен)
+  navStack = [{ screen, params }];
+  clearTimers(); updateBack(); screen(params);
 }
 function on(sel, ev, fn) { const el = $app.querySelector(sel); if (el) el.addEventListener(ev, fn); }
 function onAll(sel, ev, fn) { $app.querySelectorAll(sel).forEach(el => el.addEventListener(ev, e => fn(el, e))); }
@@ -595,6 +639,7 @@ async function profileScreen() {
       <button class="btn secondary" id="editwork">${t("edit_work")}</button>
     </div>` : ""}
   `);
+  showTabs("profile");
   on("#editname", "click", () => go(nameScreen));
   on("#editwork", "click", () => go(universityPickerScreen, { edit: true }));
 }
@@ -698,6 +743,7 @@ async function libraryScreen(params = {}) {
     </select>
     <div id="list" class="muted small" style="margin-top:10px">${t("loading")}</div>
   `);
+  showTabs("library");
   const q = document.getElementById("q");
   async function load() {
     const el = document.getElementById("list");
@@ -927,69 +973,92 @@ async function libraryUploadScreen() {
   });
 }
 
+function greetByTime() {
+  const h = new Date().getHours();
+  return h < 6 ? t("greet_night") : h < 12 ? t("greet_morning") : h < 18 ? t("greet_day") : t("greet_evening");
+}
+function firstName(full) { return (full || "").trim().split(/\s+/)[0] || (full || "—"); }
+function computeStats(hist) {
+  const fin = (hist || []).filter(x => x.finished);
+  const solved = fin.length;
+  const avg = solved ? Math.round(fin.reduce((a, x) => a + (x.total ? x.correct / x.total : 0), 0) / solved * 100) : 0;
+  const mistakes = fin.reduce((a, x) => a + Math.max(0, (x.total || 0) - (x.correct || 0)), 0);
+  const days = new Set();
+  (hist || []).forEach(x => { const d = x.date && new Date(x.date); if (d && !isNaN(d)) days.add(d.toISOString().slice(0, 10)); });
+  let streak = 0; const today = new Date();
+  for (let i = 0; i < 400; i++) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    if (days.has(key)) streak++;
+    else if (i === 0) continue;  // сегодня без активности допустимо — считаем со вчера
+    else break;
+  }
+  return { solved, avg, mistakes, streak };
+}
+function heroCard() {
+  return `<div class="hero">
+    <div class="hi">${greetByTime()},</div>
+    <div class="nm ell">${esc(firstName(ME.full_name))}</div>
+    <span class="streak">🔥 <b id="h-streak">0</b> ${t("streak_days")}</span>
+    <div class="tiles">
+      <div class="tile"><b id="h-solved">0</b><span>${t("st_solved")}</span></div>
+      <div class="tile"><b id="h-avg">0%</b><span>${t("st_avg")}</span></div>
+      <div class="tile"><b id="h-mist">0</b><span>${t("st_mistakes")}</span></div>
+    </div></div>`;
+}
+function fillHero(hist) {
+  const s = computeStats(hist);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set("h-streak", s.streak); set("h-solved", s.solved); set("h-avg", s.avg + "%"); set("h-mist", s.mistakes);
+}
+
 async function studentHome() {
   try { ME = await api("/api/me"); } catch (e) {}
-  const extra = ME.is_teacher ? "" : `
-    <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
-    <div class="item" id="mytests"><span class="ico">📖</span><div class="grow">${t("my_tests_training")}</div><span class="muted">›</span></div>
-    <div class="item" id="upload"><span class="ico">📤</span><div class="grow">${t("upload_my_test")}</div></div>
-    ${ME.teacher_pending
-      ? `<p class="muted small">${t("pending_teacher")}</p>`
-      : `<div class="item" id="torole"><span class="ico">👨‍🏫</span><div class="grow">${t("become_teacher")}</div></div>`}`;
+  const pr = ME.prices || {};
   const PAYT = {
-    ru: { bal: "Баланс", pres: "Презентация", test: "Тест", top: "💳 Пополнить баланс",
-          hint: "Создание презентаций и тестов — платно. Пополнить баланс можно в чате бота." },
-    uz: { bal: "Balans", pres: "Taqdimot", test: "Test", top: "💳 Balansni to'ldirish",
-          hint: "Taqdimot va test yaratish — pullik. Balansni bot chatida to'ldirasiz." },
-    en: { bal: "Balance", pres: "Presentation", test: "Test", top: "💳 Top up balance",
-          hint: "Creating presentations and tests is paid. Top up your balance in the bot chat." },
-  }[LANG] || null;
-  const pr = ME.prices || { presentation: 0, test: 0 };
-  const payCard = (!ME.is_teacher && ME.pays && PAYT) ? `
-    <div class="card">
-      <div class="row"><b>${PAYT.bal}</b><b>${fmtSum(ME.balance || 0)} сум</b></div>
-      <p class="muted small" style="margin:6px 0">${PAYT.pres} — ${fmtSum(pr.presentation)} · ${PAYT.test} — ${fmtSum(pr.test)}</p>
-      <button class="btn secondary" id="topup">${PAYT.top}</button>
-      <p class="muted small" style="margin:6px 0 0">${PAYT.hint}</p>
-    </div>` : "";
+    ru: { bal: "Баланс", top: "💳 Пополнить" }, uz: { bal: "Balans", top: "💳 To'ldirish" },
+    en: { bal: "Balance", top: "💳 Top up" },
+  }[LANG] || { bal: "Баланс", top: "💳 Пополнить" };
+  const payCard = (!ME.is_teacher && ME.pays) ? `
+    <div class="card"><div class="row"><b>${PAYT.bal}</b><b>${fmtSum(ME.balance || 0)} сум</b></div>
+      <button class="btn secondary" id="topup" style="margin-top:8px">${PAYT.top}</button></div>` : "";
+  const g = (id, ico, label, sub) => `<div class="gcard" id="${id}"><span class="gi">${ico}</span>
+    <span class="gt">${label}</span>${sub ? `<span class="gs">${sub}</span>` : ""}</div>`;
   render(`
     ${langBar()}
-    <h1>${esc(ME.full_name)}</h1>
+    ${heroCard()}
     <div class="card">
       <p class="muted small" style="margin:0 0 6px">${t("enter_code")}</p>
       <input id="code" class="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
       <button class="btn" id="join">${t("start_test")}</button>
     </div>
     ${payCard}
-    <div class="item" id="games"><span class="ico">🎮</span><div class="grow">${quizT().games_entry}</div><span class="muted">›</span></div>
-    ${ME.song_enabled ? `<div class="item" id="song"><span class="ico">🎵</span><div class="grow">${songT().title.replace("🎵 ", "")}</div><span class="muted">›</span></div>` : ""}
-    <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
-    ${extra}
-    <h2>${t("my_results")}</h2>
+    <h2>${t("quick_title")}</h2>
+    <div class="grid">
+      ${g("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ")}
+      ${ME.song_enabled ? g("song", "🎵", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "") : ""}
+      ${g("mytests", "📖", t("my_tests_training"))}
+      ${g("upload", "📤", t("upload_my_test"))}
+    </div>
+    ${ME.teacher_pending ? `<p class="muted small">${t("pending_teacher")}</p>`
+      : `<button class="link" id="torole">👨‍🏫 ${t("become_teacher")}</button>`}
+    <h2>${t("results_title")}</h2>
     <div id="hist" class="muted small">${t("loading")}</div>
-    <button class="link" id="profile">${t("profile")}</button>
-    <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
+    <button class="btn secondary" id="homesupport" style="margin-top:10px">${t("support")}</button>
   `);
-  document.body.classList.add("home");  // показываем ссылку на создателя только здесь
+  document.body.classList.add("home");  // ссылка на создателя — только здесь
+  showTabs("home");
   const code = document.getElementById("code");
   code.addEventListener("input", () => { code.value = code.value.replace(/\D/g, "").slice(0, 6); });
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
   on("#join", "click", join);
-  on("#games", "click", () => go(gamesScreen));
   on("#song", "click", () => go(songScreen));
   on("#homesupport", "click", () => go(supportScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
-  on("#topup", "click", () => {
-    toast("Откройте чат бота и нажмите «💳 Пополнить баланс»");
-    try { tg && tg.close(); } catch (e) {}
-  });
-  on("#profile", "click", () => go(profileScreen));
-  if (!ME.is_teacher) {
-    on("#library", "click", () => go(libraryScreen));
-    on("#mytests", "click", () => go(testsScreen));
-    on("#upload", "click", () => go(uploadScreen));
-    on("#torole", "click", () => go(universityPickerScreen));
-  }
+  on("#mytests", "click", () => go(testsScreen));
+  on("#upload", "click", () => go(uploadScreen));
+  on("#torole", "click", () => go(universityPickerScreen));
+  on("#topup", "click", () => { toast("Откройте чат бота и нажмите «💳 Пополнить баланс»"); try { tg && tg.close(); } catch (e) {} });
   async function join() {
     if (code.value.length !== 6) { toast(t("code_6")); return; }
     try {
@@ -999,10 +1068,11 @@ async function studentHome() {
   }
   try {
     const h = await api("/api/student/history");
+    fillHero(h);
     const el = document.getElementById("hist");
     if (!el) return;
     el.className = "";
-    el.innerHTML = h.length ? h.map(x => `
+    el.innerHTML = h.length ? h.slice(0, 5).map(x => `
       <div class="item" data-id="${x.attempt_id}">
         <div class="grow"><div class="ell">${esc(x.test_title)}</div><div class="muted small">${fmtDate(x.date)}</div></div>
         <span class="badge">${x.finished ? `${x.correct}/${x.total}` : t("running")}</span>
@@ -1234,9 +1304,11 @@ async function teacherHome() {
   const a = ME.active_session;
   render(`
     ${langBar()}
-    <h1>${esc(ME.full_name)}</h1>
-    <div class="row" style="margin:-6px 0 12px"><span class="muted small">${t("teacher")}</span>
-      <span class="badge ${ME.is_pro_plus || ME.plan === "pro" ? "pro" : ""}">${ME.is_pro_plus ? "💎 Pro+ " + new Date(ME.proplus_until).toLocaleDateString("ru-RU") : (ME.plan === "pro" ? t("plan_pro") + " " + new Date(ME.pro_until).toLocaleDateString("ru-RU") : t("plan_free"))}</span></div>
+    <div class="hero">
+      <div class="hi">${greetByTime()},</div>
+      <div class="nm ell">${esc(firstName(ME.full_name))}</div>
+      <span class="streak">${ME.is_pro_plus ? "💎 Pro+" : (ME.plan === "pro" ? "⭐ Pro" : "🎓 " + t("teacher"))}</span>
+    </div>
     ${a ? `<div class="banner" id="active"><b>${t("test_running")} · ${esc(a.group)}</b><br>
       <span class="small">${esc(a.test_title)} · ${t("code")} <b>${a.code}</b> · ${t("time_left")} <span id="aleft">${fmtTime(a.seconds_left)}</span></span></div>` : ""}
     <div class="item" id="tests"><span class="ico">📚</span><div class="grow">${t("my_tests")}</div></div>
@@ -1256,6 +1328,7 @@ async function teacherHome() {
     <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
   `);
   document.body.classList.add("home");  // показываем ссылку на создателя только здесь
+  showTabs("home");
   if (a) {
     on("#active", "click", () => go(liveScreen, { id: a.id }));
     const end = Date.now() + a.seconds_left * 1000;
@@ -2314,6 +2387,7 @@ function gamesScreen() {
     ${tile("quiz", "🎯", Q.quiz_name, Q.quiz_desc, true)}
     ${tile("mafia", "🕵️", Q.mafia_name, Q.mafia_desc, true)}
   `);
+  showTabs("games");
   on("#g-quiz", "click", () => go(isHost ? quizCreateScreen : quizJoinScreen));
   on("#g-mafia", "click", () => go(mafiaMenuScreen));
 }
