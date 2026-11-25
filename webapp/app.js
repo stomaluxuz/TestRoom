@@ -1011,6 +1011,10 @@ function fillHero(hist) {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set("h-streak", s.streak); set("h-solved", s.solved); set("h-avg", s.avg + "%"); set("h-mist", s.mistakes);
 }
+function gcard(id, ico, label, sub) {
+  return `<div class="gcard" id="${id}"><span class="gi">${ico}</span>
+    <span class="gt">${label}</span>${sub ? `<span class="gs">${sub}</span>` : ""}</div>`;
+}
 
 async function studentHome() {
   try { ME = await api("/api/me"); } catch (e) {}
@@ -1022,8 +1026,6 @@ async function studentHome() {
   const payCard = (!ME.is_teacher && ME.pays) ? `
     <div class="card"><div class="row"><b>${PAYT.bal}</b><b>${fmtSum(ME.balance || 0)} сум</b></div>
       <button class="btn secondary" id="topup" style="margin-top:8px">${PAYT.top}</button></div>` : "";
-  const g = (id, ico, label, sub) => `<div class="gcard" id="${id}"><span class="gi">${ico}</span>
-    <span class="gt">${label}</span>${sub ? `<span class="gs">${sub}</span>` : ""}</div>`;
   render(`
     ${langBar()}
     ${heroCard()}
@@ -1035,10 +1037,10 @@ async function studentHome() {
     ${payCard}
     <h2>${t("quick_title")}</h2>
     <div class="grid">
-      ${g("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ")}
-      ${ME.song_enabled ? g("song", "🎵", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "") : ""}
-      ${g("mytests", "📖", t("my_tests_training"))}
-      ${g("upload", "📤", t("upload_my_test"))}
+      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ")}
+      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "") : ""}
+      ${gcard("mytests", "📖", t("my_tests_training"))}
+      ${gcard("upload", "📤", t("upload_my_test"))}
     </div>
     ${ME.teacher_pending ? `<p class="muted small">${t("pending_teacher")}</p>`
       : `<button class="link" id="torole">👨‍🏫 ${t("become_teacher")}</button>`}
@@ -1311,20 +1313,20 @@ async function teacherHome() {
     </div>
     ${a ? `<div class="banner" id="active"><b>${t("test_running")} · ${esc(a.group)}</b><br>
       <span class="small">${esc(a.test_title)} · ${t("code")} <b>${a.code}</b> · ${t("time_left")} <span id="aleft">${fmtTime(a.seconds_left)}</span></span></div>` : ""}
-    <div class="item" id="tests"><span class="ico">📚</span><div class="grow">${t("my_tests")}</div></div>
-    <div class="item" id="upload"><span class="ico">📤</span><div class="grow">${t("upload_test")}</div></div>
-    <div class="item" id="history"><span class="ico">🕘</span><div class="grow">${t("history")}</div></div>
-    <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
-    <div class="item" id="games"><span class="ico">🎮</span><div class="grow">${quizT().games_entry}</div><span class="muted">›</span></div>
-    ${ME.song_enabled ? `<div class="item" id="song"><span class="ico">🎵</span><div class="grow">${songT().title.replace("🎵 ", "")}</div><span class="muted">›</span></div>` : ""}
-    <div class="item" id="aichat"><span class="ico">💬</span><div class="grow">${t("ai_assistant")}</div>${ME.is_pro_plus || ME.is_admin ? "" : `<span class="badge pro">Pro+</span>`}<span class="muted">›</span></div>
-    <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
-    <div class="item" id="libupload"><span class="ico">⬆️</span><div class="grow">${libT().upload}</div></div>
-    <div class="item" id="profile"><span class="ico">👤</span><div class="grow">${t("profile")}</div><span class="muted">›</span></div>
-    ${ME.acting_as ? "" : `<div class="item" id="student"><span class="ico">🎓</span><div class="grow">${t("take_by_code")}</div></div>`}
-    ${ME.is_admin && !ME.acting_as ? `<div class="item" id="admin"><span class="ico">🛠</span><div class="grow">${t("admin_panel")}</div><span class="muted">›</span></div>` : ""}
-    ${ME.is_admin || ME.acting_as ? "" : `<div class="item" id="torole"><span class="ico">🎓</span><div class="grow">${t("become_student")}</div></div>`}
-    <p class="muted small">${t("upload_via_bot")}</p>
+    <h2>${t("quick_title")}</h2>
+    <div class="grid">
+      ${gcard("tests", "📚", t("my_tests"))}
+      ${gcard("upload", "📤", t("upload_test"))}
+      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ")}
+      ${gcard("aichat", "💬", t("ai_assistant"), ME.is_pro_plus || ME.is_admin ? "" : "Pro+")}
+      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", "")) : ""}
+      ${gcard("libupload", "⬆️", libT().upload)}
+      ${gcard("history", "🕘", t("history"))}
+      ${ME.is_admin && !ME.acting_as ? gcard("admin", "🛠", t("admin_panel")) : ""}
+    </div>
+    ${ME.acting_as ? "" : `<button class="link" id="student">🎓 ${t("take_by_code")}</button>`}
+    ${ME.is_admin || ME.acting_as ? "" : `<button class="link" id="torole">🎓 ${t("become_student")}</button>`}
+    <p class="muted small" style="margin-top:6px">${t("upload_via_bot")}</p>
     <button class="btn secondary" id="homesupport" style="margin-top:8px">${t("support")}</button>
   `);
   document.body.classList.add("home");  // показываем ссылку на создателя только здесь
@@ -1338,12 +1340,9 @@ async function teacherHome() {
   on("#upload", "click", () => go(uploadScreen));
   on("#history", "click", () => go(historyScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
-  on("#games", "click", () => go(gamesScreen));
   on("#song", "click", () => go(songScreen));
   on("#aichat", "click", () => go(aiChatScreen));
-  on("#library", "click", () => go(libraryScreen));
   on("#libupload", "click", () => go(libraryUploadScreen));
-  on("#profile", "click", () => go(profileScreen));
   on("#student", "click", () => go(studentHome));
   on("#admin", "click", () => go(adminScreen));
   on("#torole", "click", switchToStudent);

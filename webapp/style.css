@@ -312,3 +312,9 @@ body.home .credit { display: block; }
 #tabbar .tab.on { color: var(--brand); }
 body.hastabs #app { padding-bottom: 112px; }
 body.hastabs .credit { margin-bottom: 72px; }  /* ссылка-создатель не прячется под таб-меню */
+
+/* Более живой фон: мягкая фирменная подсветка сверху (работает и в тёмной теме). */
+body { background:
+  linear-gradient(180deg, rgba(14,164,127,.14), rgba(14,164,127,0) 280px) no-repeat,
+  var(--bg2); background-attachment: fixed; }
+.gcard { background: var(--bg); }
