@@ -189,7 +189,7 @@ async def _run_presentation(uid, target_id, topic, lang, slides, author_name, gr
 
 
 async def _run_song(uid, target_id, topic, style, lang, charged):
-    """Фоновая генерация песни: ИИ пишет текст → Mureka озвучивает → mp3 в чат с ботом.
+    """Фоновая генерация песни: ИИ пишет текст → сервис песен озвучивает → mp3 в чат с ботом.
     При сбое — возврат средств и уведомление."""
     from . import limits
     from . import music
@@ -451,7 +451,7 @@ def create_app() -> FastAPI:
             "test": svc._price(cfg, "test"),
             "song": svc._price(cfg, "song"),
         }
-        data["song_enabled"] = svc.song_enabled()  # услуга «Песня» доступна (подключён Mureka)
+        data["song_enabled"] = svc.song_enabled()  # услуга «Песня» доступна (подключён ключ)
         if user.is_teacher:
             data["active_session"] = await svc.active_session(db, user)
         return data

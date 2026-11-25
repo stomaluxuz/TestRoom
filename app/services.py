@@ -437,8 +437,8 @@ async def charge_feature(db: AsyncSession, user: User, kind: str, force: bool = 
 
 
 def song_enabled() -> bool:
-    """Услуга «Песня» доступна только если подключён ключ Mureka."""
-    return bool(settings.mureka_api_key)
+    """Услуга «Песня» доступна только если подключён ключ сервиса песен (fal.ai и т.п.)."""
+    return bool(settings.song_api_key)
 
 
 async def refund(db: AsyncSession, user: User, amount: int):

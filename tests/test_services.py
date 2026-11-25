@@ -539,9 +539,9 @@ async def test_charge_song_charges_everyone(db):
 
 def test_song_enabled_flag(monkeypatch):
     from app.config import settings
-    monkeypatch.setattr(settings, "mureka_api_key", "")
+    monkeypatch.setattr(settings, "song_api_key", "")
     assert svc.song_enabled() is False
-    monkeypatch.setattr(settings, "mureka_api_key", "k")
+    monkeypatch.setattr(settings, "song_api_key", "k")
     assert svc.song_enabled() is True
 
 

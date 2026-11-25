@@ -81,7 +81,7 @@ async def test_ai_presentation_endpoint(client, monkeypatch):
 
 
 async def test_song_endpoint(client, monkeypatch):
-    """Песня: без ключа Mureka — 503; с ключом — ставится в очередь и платят ВСЕ."""
+    """Песня: без ключа сервиса песен — 503; с ключом — ставится в очередь и платят ВСЕ."""
     from app import api as apimod
     from app import db as dbmod
     from app import services as svc
@@ -97,11 +97,11 @@ async def test_song_endpoint(client, monkeypatch):
     H = headers(ADMIN_ID)  # админ-преподаватель — всё равно платит
     await client.post("/api/me/name", headers=H, json={"full_name": "Поющий Админ"})
 
-    monkeypatch.setattr(cfg, "mureka_api_key", "")  # услуга выключена
+    monkeypatch.setattr(cfg, "song_api_key", "")  # услуга выключена
     assert (await client.post("/api/ai/song", headers=H, json={"topic": "Кариес"})).status_code == 503
     assert not calls
 
-    monkeypatch.setattr(cfg, "mureka_api_key", "test-key")  # включаем
+    monkeypatch.setattr(cfg, "song_api_key", "test-key")  # включаем
     async with dbmod.SessionLocal() as db:
         u = await svc.get_or_create_user(db, ADMIN_ID)
         u.balance = 100000

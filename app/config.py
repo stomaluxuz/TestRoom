@@ -64,10 +64,13 @@ class Settings:
     voyage_api_key: str = field(default_factory=lambda: os.getenv("VOYAGE_API_KEY", ""))
     voyage_model: str = field(default_factory=lambda: os.getenv("VOYAGE_MODEL", "voyage-3.5-lite"))
 
-    # Генерация песен (Mureka API). Пусто — услуга «Песня» выключена (кнопка скрыта, списаний нет).
-    mureka_api_key: str = field(default_factory=lambda: os.getenv("MUREKA_API_KEY", ""))
-    mureka_model: str = field(default_factory=lambda: os.getenv("MUREKA_MODEL", "auto"))
-    mureka_base: str = field(default_factory=lambda: os.getenv("MUREKA_BASE", "https://api.mureka.ai"))
+    # Генерация песен (по умолчанию fal.ai — оплата по факту, без месячного минимума).
+    # Пусто — услуга «Песня» выключена (кнопка скрыта, списаний нет).
+    song_api_key: str = field(default_factory=lambda: os.getenv("SONG_API_KEY", "") or os.getenv("FAL_KEY", ""))
+    song_model: str = field(default_factory=lambda: os.getenv("SONG_MODEL", "fal-ai/minimax-music"))
+    song_base: str = field(default_factory=lambda: os.getenv("SONG_BASE", "https://queue.fal.run"))
+    # Формат ключа в заголовке: fal — «Key», bearer — «Bearer».
+    song_auth_scheme: str = field(default_factory=lambda: os.getenv("SONG_AUTH_SCHEME", "Key"))
     # Размерность векторов (Voyage voyage-3.5-lite: 256/512/1024/2048). 512 — компромисс память/качество.
     embed_dim: int = field(default_factory=lambda: int(os.getenv("EMBED_DIM", "512")))
     # Сколько кусков библиотеки отдавать в контекст генерации.
