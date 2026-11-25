@@ -66,6 +66,7 @@ const T = {
     greet_morning: "Доброе утро", greet_day: "Добрый день", greet_evening: "Добрый вечер", greet_night: "Доброй ночи",
     streak_days: "дн.", st_solved: "решено", st_avg: "средний", st_mistakes: "ошибок",
     quick_title: "Создавай и учись", results_title: "Мои результаты",
+    sub_history: "История", sub_apply: "Отправить заявку", sub_open_tests: "Открытые тесты", sub_upload: "Свой файл",
     teacher: "Преподаватель", plan_free: "Бесплатный тариф", plan_pro: "Pro до",
     test_running: "Идёт тест", code: "код", time_left: "осталось",
     my_tests: "Мои тесты", upload_test: "Загрузить тест", history: "История запусков",
@@ -166,6 +167,7 @@ const T = {
     greet_morning: "Xayrli tong", greet_day: "Xayrli kun", greet_evening: "Xayrli kech", greet_night: "Xayrli tun",
     streak_days: "kun", st_solved: "yechildi", st_avg: "o'rtacha", st_mistakes: "xato",
     quick_title: "Yarating va o'rganing", results_title: "Mening natijalarim",
+    sub_history: "Tarix", sub_apply: "Ariza yuborish", sub_open_tests: "Ochiq testlar", sub_upload: "O'z fayling",
     teacher: "O'qituvchi", plan_free: "Bepul tarif", plan_pro: "Pro:",
     test_running: "Test ketmoqda", code: "kod", time_left: "qoldi",
     my_tests: "Mening testlarim", upload_test: "Test yuklash", history: "Ishga tushirishlar tarixi",
@@ -266,6 +268,7 @@ const T = {
     greet_morning: "Good morning", greet_day: "Good afternoon", greet_evening: "Good evening", greet_night: "Good night",
     streak_days: "d", st_solved: "solved", st_avg: "average", st_mistakes: "mistakes",
     quick_title: "Create & learn", results_title: "My results",
+    sub_history: "History", sub_apply: "Send a request", sub_open_tests: "Open tests", sub_upload: "Your file",
     teacher: "Teacher", plan_free: "Free plan", plan_pro: "Pro until",
     test_running: "Test in progress", code: "code", time_left: "left",
     my_tests: "My tests", upload_test: "Upload test", history: "Launch history",
@@ -1012,9 +1015,24 @@ function fillHero(hist) {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set("h-streak", s.streak); set("h-solved", s.solved); set("h-avg", s.avg + "%"); set("h-mist", s.mistakes);
 }
-function gcard(id, ico, label, sub) {
-  return `<div class="gcard" id="${id}"><span class="gi">${ico}</span>
-    <span class="gt">${label}</span>${sub ? `<span class="gs">${sub}</span>` : ""}</div>`;
+const CARD_PAL = {
+  blue: { bg: "#e9f1fe", acc: "#2a6ff0" }, violet: { bg: "#f0eafe", acc: "#7c3aed" },
+  orange: { bg: "#fdefe1", acc: "#ef6c00" }, emerald: { bg: "#e3f6ee", acc: "#0ea47f" },
+  teal: { bg: "#e2f5f8", acc: "#0a9bb0" }, pink: { bg: "#fde9f1", acc: "#e23c84" },
+  amber: { bg: "#fdf3dc", acc: "#d99400" }, red: { bg: "#fde9e8", acc: "#e2403d" },
+};
+function gcard(id, ico, label, sub, pal) {
+  const p = CARD_PAL[pal] || CARD_PAL.emerald;
+  return `<div class="gcard" id="${id}" style="background:${p.bg}">
+    <span class="gic" style="color:${p.acc}">${ico}</span>
+    <div class="gt">${label}</div>${sub ? `<div class="gs">${sub}</div>` : ""}</div>`;
+}
+function gcardWide(id, ico, label, sub, pal) {
+  const p = CARD_PAL[pal] || CARD_PAL.emerald;
+  return `<div class="gcard wide" id="${id}" style="background:${p.bg}">
+    <span class="gic" style="color:${p.acc}">${ico}</span>
+    <div class="wtext"><div class="gt">${label}</div>${sub ? `<div class="gs">${sub}</div>` : ""}</div>
+    <span class="chev">›</span></div>`;
 }
 
 async function studentHome() {
@@ -1038,15 +1056,14 @@ async function studentHome() {
     ${payCard}
     <h2>${t("quick_title")}</h2>
     <div class="grid">
-      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ")}
-      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "") : ""}
-      ${gcard("mytests", "📖", t("my_tests_training"))}
-      ${gcard("upload", "📤", t("upload_my_test"))}
+      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ", "blue")}
+      ${gcard("mytests", "📖", t("my_tests_training"), t("sub_open_tests"), "violet")}
+      ${gcard("upload", "📤", t("upload_my_test"), t("sub_upload"), "orange")}
+      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "", "pink") : ""}
+      ${gcard("results", "📊", t("results_title"), t("sub_history"), "emerald")}
+      ${ME.teacher_pending ? "" : gcardWide("torole", "🎓", t("become_teacher"), t("sub_apply"), "teal")}
     </div>
-    ${ME.teacher_pending ? `<p class="muted small">${t("pending_teacher")}</p>`
-      : `<button class="link" id="torole">👨‍🏫 ${t("become_teacher")}</button>`}
-    <h2>${t("results_title")}</h2>
-    <div id="hist" class="muted small">${t("loading")}</div>
+    ${ME.teacher_pending ? `<p class="muted small">${t("pending_teacher")}</p>` : ""}
     <button class="btn secondary" id="homesupport" style="margin-top:10px">${t("support")}</button>
   `);
   document.body.classList.add("home");  // ссылка на создателя — только здесь
@@ -1061,6 +1078,7 @@ async function studentHome() {
   on("#mytests", "click", () => go(testsScreen));
   on("#upload", "click", () => go(uploadScreen));
   on("#torole", "click", () => go(universityPickerScreen));
+  on("#results", "click", () => go(studentResultsScreen));
   on("#topup", "click", () => { toast("Откройте чат бота и нажмите «💳 Пополнить баланс»"); try { tg && tg.close(); } catch (e) {} });
   async function join() {
     if (code.value.length !== 6) { toast(t("code_6")); return; }
@@ -1069,22 +1087,26 @@ async function studentHome() {
       go(attemptScreen, { state: st });
     } catch (e) { haptic("error"); toast(e.message); }
   }
-  try {
-    const h = await api("/api/student/history");
-    fillHero(h);
-    const el = document.getElementById("hist");
-    if (!el) return;
-    el.className = "";
-    el.innerHTML = h.length ? h.slice(0, 5).map(x => `
-      <div class="item" data-id="${x.attempt_id}">
-        <div class="grow"><div class="ell">${esc(x.test_title)}</div><div class="muted small">${fmtDate(x.date)}</div></div>
-        <span class="badge">${x.finished ? `${x.correct}/${x.total}` : t("running")}</span>
-      </div>`).join("") : `<p class="muted small">${t("no_history")}</p>`;
-    onAll("#hist .item", "click", async el2 => {
-      try { go(attemptScreen, { state: await api(`/api/student/attempts/${el2.dataset.id}`) }); }
-      catch (e) { toast(e.message); }
-    });
-  } catch (e) {}
+  try { fillHero(await api("/api/student/history")); } catch (e) {}
+}
+
+// Отдельный экран «Мои результаты» (история прохождений)
+async function studentResultsScreen() {
+  render(`${langBar()}<h1>📊 ${t("results_title")}</h1><div id="hist" class="muted small">${t("loading")}</div>`);
+  let h;
+  try { h = await api("/api/student/history"); } catch (e) { return toast(e.message); }
+  const el = document.getElementById("hist");
+  if (!el) return;
+  el.className = "";
+  el.innerHTML = h.length ? h.map(x => `
+    <div class="item" data-id="${x.attempt_id}">
+      <div class="grow"><div class="ell">${esc(x.test_title)}</div><div class="muted small">${fmtDate(x.date)}</div></div>
+      <span class="badge">${x.finished ? `${x.correct}/${x.total}` : t("running")}</span>
+    </div>`).join("") : `<p class="muted small">${t("no_history")}</p>`;
+  onAll("#hist .item", "click", async el2 => {
+    try { go(attemptScreen, { state: await api(`/api/student/attempts/${el2.dataset.id}`) }); }
+    catch (e) { toast(e.message); }
+  });
 }
 
 function attemptScreen({ state }) {
@@ -1316,14 +1338,14 @@ async function teacherHome() {
       <span class="small">${esc(a.test_title)} · ${t("code")} <b>${a.code}</b> · ${t("time_left")} <span id="aleft">${fmtTime(a.seconds_left)}</span></span></div>` : ""}
     <h2>${t("quick_title")}</h2>
     <div class="grid">
-      ${gcard("tests", "📚", t("my_tests"))}
-      ${gcard("upload", "📤", t("upload_test"))}
-      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ")}
-      ${gcard("aichat", "💬", t("ai_assistant"), ME.is_pro_plus || ME.is_admin ? "" : "Pro+")}
-      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", "")) : ""}
-      ${gcard("libupload", "⬆️", libT().upload)}
-      ${gcard("history", "🕘", t("history"))}
-      ${ME.is_admin && !ME.acting_as ? gcard("admin", "🛠", t("admin_panel")) : ""}
+      ${gcard("tests", "📚", t("my_tests"), "", "blue")}
+      ${gcard("upload", "📤", t("upload_test"), "", "orange")}
+      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ", "violet")}
+      ${gcard("aichat", "💬", t("ai_assistant"), ME.is_pro_plus || ME.is_admin ? "" : "Pro+", "teal")}
+      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", ""), "", "pink") : ""}
+      ${gcard("libupload", "⬆️", libT().upload, "", "emerald")}
+      ${gcard("history", "🕘", t("history"), "", "amber")}
+      ${ME.is_admin && !ME.acting_as ? gcard("admin", "🛠", t("admin_panel"), "", "red") : ""}
     </div>
     ${ME.acting_as ? "" : `<button class="link" id="student">🎓 ${t("take_by_code")}</button>`}
     ${ME.is_admin || ME.acting_as ? "" : `<button class="link" id="torole">🎓 ${t("become_student")}</button>`}

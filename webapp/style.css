@@ -318,3 +318,17 @@ body { background:
   linear-gradient(180deg, rgba(14,164,127,.14), rgba(14,164,127,0) 280px) no-repeat,
   var(--bg2); background-attachment: fixed; }
 .gcard { background: var(--bg); }
+
+/* ===== сочные карточки-плитки (в стиле дашборда, у каждой свой цвет) ===== */
+.grid { gap: 12px; }
+.gcard { color: #15202b; border-radius: 18px; padding: 14px; min-height: 104px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.05); display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.gcard .gic { width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,.72);
+  display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 6px; }
+.gcard .gt { font-weight: 700; font-size: 15px; line-height: 1.2; color: #15202b; }
+.gcard .gs { font-size: 12px; color: #5c6b7a; }
+.gcard:active { transform: scale(.98); }
+.gcard.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; min-height: 0; padding: 14px 16px; }
+.gcard.wide .gic { margin-bottom: 0; }
+.gcard.wide .wtext { flex: 1; min-width: 0; }
+.gcard .chev { color: #8a97a4; font-size: 22px; }
