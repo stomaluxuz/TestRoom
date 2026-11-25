@@ -165,6 +165,10 @@ def main_reply_kb(user: User) -> ReplyKeyboardMarkup:
         # услуга «Реферат» — для студентов (не преподавателей)
         rows.append([KeyboardButton(text=btn("referat", lang))])
         rows.append([KeyboardButton(text=btn("balance", lang)), KeyboardButton(text=btn("topup", lang))])
+    # «Создать песню» — только в приложении (откроет экран песни); платно для всех
+    song_url = _song_open_url()
+    if song_url:
+        rows.append([KeyboardButton(text=_SONG_BTN.get(lang, _SONG_BTN["ru"]), web_app=WebAppInfo(url=song_url))])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True)
 
 
@@ -202,10 +206,39 @@ def _short_title(s: str, n: int = 70) -> str:
     return cut.rstrip(" .,;:—-") + "…"
 
 
-def webapp_button(text: str = "📱 Открыть приложение") -> InlineKeyboardButton | None:
+def webapp_button(text: str = "📱 Открыть приложение", suffix: str = "") -> InlineKeyboardButton | None:
     if settings.webapp_url.startswith("https://"):
-        return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=settings.webapp_url))
+        return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=settings.webapp_url + suffix))
     return None
+
+
+_SONG_BTN = {"ru": "🎵 Создать песню", "uz": "🎵 Qo'shiq yaratish", "en": "🎵 Create a song"}
+
+
+def _song_open_url() -> str | None:
+    """Кнопка «Создать песню» открывает приложение сразу на экране песни (#song)."""
+    if svc.song_enabled() and settings.webapp_url.startswith("https://"):
+        return settings.webapp_url + "#song"
+    return None
+
+
+@router.message(Command("song", "pesnya", "qoshiq"))
+async def song_cmd(message: Message):
+    """Кнопка/команда «Создать песню» — открывает приложение (создание песни только там)."""
+    async with dbmod.SessionLocal() as db:
+        user = await svc.get_or_create_user(db, message.from_user.id, message.from_user.username)
+    lang = getattr(user, "lang", "ru") or "ru"
+    url = _song_open_url()
+    if not url:
+        return await message.answer({"ru": "🎵 Услуга «Песня» скоро появится.",
+                                     "uz": "🎵 «Qo'shiq» xizmati tez orada.",
+                                     "en": "🎵 The Song feature is coming soon."}.get(lang))
+    text = {"ru": "🎵 Создание песни — в приложении. Нажмите кнопку ниже:",
+            "uz": "🎵 Qo'shiq yaratish — ilovada. Quyidagi tugmani bosing:",
+            "en": "🎵 Song creation is in the app. Tap the button below:"}.get(lang)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=_SONG_BTN.get(lang, _SONG_BTN["ru"]), web_app=WebAppInfo(url=url))]])
+    await message.answer(text, reply_markup=kb)
 
 
 def menu_keyboard(user: User) -> InlineKeyboardMarkup:

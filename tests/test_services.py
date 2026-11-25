@@ -526,6 +526,25 @@ async def test_charge_feature_student(db):
     assert e.value.status == 402 and u.balance == 2000
 
 
+async def test_charge_song_charges_everyone(db):
+    """Песня — платная для ВСЕХ (force=True): даже преподаватель платит."""
+    t = await make_teacher(db, 430, "Поющий Препод")
+    t.balance = 50000
+    await db.commit()
+    charged = await svc.charge_feature(db, t, "song", force=True)
+    assert charged == 15000 and t.balance == 35000  # списали, хотя преподаватель
+    # обычные услуги преподавателю по-прежнему бесплатны
+    assert await svc.charge_feature(db, t, "presentation") == 0 and t.balance == 35000
+
+
+def test_song_enabled_flag(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "mureka_api_key", "")
+    assert svc.song_enabled() is False
+    monkeypatch.setattr(settings, "mureka_api_key", "k")
+    assert svc.song_enabled() is True
+
+
 async def test_charge_feature_free_for_teachers_and_admin(db):
     t = await make_teacher(db, 420, "Препод Платный")
     assert await svc.charge_feature(db, t, "presentation") == 0

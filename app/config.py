@@ -63,6 +63,11 @@ class Settings:
     # RAG: эмбеддинги библиотеки (Voyage AI). Пусто — RAG выключен, генерация как раньше.
     voyage_api_key: str = field(default_factory=lambda: os.getenv("VOYAGE_API_KEY", ""))
     voyage_model: str = field(default_factory=lambda: os.getenv("VOYAGE_MODEL", "voyage-3.5-lite"))
+
+    # Генерация песен (Mureka API). Пусто — услуга «Песня» выключена (кнопка скрыта, списаний нет).
+    mureka_api_key: str = field(default_factory=lambda: os.getenv("MUREKA_API_KEY", ""))
+    mureka_model: str = field(default_factory=lambda: os.getenv("MUREKA_MODEL", "auto"))
+    mureka_base: str = field(default_factory=lambda: os.getenv("MUREKA_BASE", "https://api.mureka.ai"))
     # Размерность векторов (Voyage voyage-3.5-lite: 256/512/1024/2048). 512 — компромисс память/качество.
     embed_dim: int = field(default_factory=lambda: int(os.getenv("EMBED_DIM", "512")))
     # Сколько кусков библиотеки отдавать в контекст генерации.

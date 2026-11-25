@@ -646,3 +646,20 @@ async def generate_referat(topic: str, lang: str = "ru", context: str = "") -> s
     )
     # effort=medium — реферат требует глубины (не «low», как для простых задач)
     return await _ask(SYSTEM_REFERAT, prompt, max_tokens=8000, effort="medium")
+
+
+SYSTEM_SONG = (
+    "Ты — поэт-песенник. Пишешь живой, ритмичный текст песни с рифмой, который приятно петь. "
+    "Структура: 2–3 куплета и повторяющийся припев. Помечай части [Куплет]/[Припев] (на языке песни). "
+    "Без грубости и оскорблений. В ответе — ТОЛЬКО текст песни, без пояснений и комментариев."
+)
+
+
+async def generate_song_lyrics(topic: str, style: str = "", lang: str = "ru") -> str:
+    """Текст песни по теме (куплеты + припев). style — жанр/настроение (поп, рэп, детская…)."""
+    topic = " ".join((topic or "").split())
+    if not topic:
+        raise _err("Напишите тему песни.")
+    style_line = f"Жанр/настроение: {style}. " if style else ""
+    prompt = f"Напиши текст песни по теме: «{topic}». {style_line}{_lang_instr(lang)}"
+    return await _ask(SYSTEM_SONG, prompt, max_tokens=900, effort="low")

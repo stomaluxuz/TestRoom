@@ -357,6 +357,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "price_presentation": "5000",
     "price_test": "5000",
     "price_referat": "5000",
+    "price_song": "15000",  # песня дорогая — платят ВСЕ (см. charge_feature force=True)
     "card_number": "9860167802934742",
     "card_holder": "ABDULBOSIT ABDURAZOKOV",
     "topup_amounts": "10000,25000,50000",
@@ -410,17 +411,21 @@ def is_free_user(user: User) -> bool:
     return user.is_teacher or user.id in settings.admin_ids or user.is_pro or user.is_pro_plus
 
 
-async def charge_feature(db: AsyncSession, user: User, kind: str) -> int:
-    """Списать стоимость фичи со студента. Возвращает списанную сумму (0 — бесплатно).
+_FEATURE_WHAT = {"presentation": "презентацию", "test": "тест", "referat": "реферат", "song": "песню"}
+
+
+async def charge_feature(db: AsyncSession, user: User, kind: str, force: bool = False) -> int:
+    """Списать стоимость фичи. Возвращает списанную сумму (0 — бесплатно).
+    force=True — списать со ВСЕХ, даже с преподавателей/админа/Pro (напр. «Песня» — дорого).
     Бросает ServiceError(402), если на балансе не хватает средств."""
-    if is_free_user(user):
+    if not force and is_free_user(user):
         return 0
     price = await get_price(db, kind)
     if price <= 0:
         return 0
     balance = user.balance or 0
     if balance < price:
-        what = "презентацию" if kind == "presentation" else "тест"
+        what = _FEATURE_WHAT.get(kind, "услугу")
         raise ServiceError(
             f"Недостаточно средств: за {what} нужно {price:,} сум, на балансе {balance:,} сум. "
             "Пополните баланс кнопкой «💳 Пополнить баланс».".replace(",", " "),
@@ -429,6 +434,11 @@ async def charge_feature(db: AsyncSession, user: User, kind: str) -> int:
     user.balance = balance - price
     await db.commit()
     return price
+
+
+def song_enabled() -> bool:
+    """Услуга «Песня» доступна только если подключён ключ Mureka."""
+    return bool(settings.mureka_api_key)
 
 
 async def refund(db: AsyncSession, user: User, amount: int):

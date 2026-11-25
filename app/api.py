@@ -188,6 +188,39 @@ async def _run_presentation(uid, target_id, topic, lang, slides, author_name, gr
                 pass
 
 
+async def _run_song(uid, target_id, topic, style, lang, charged):
+    """Фоновая генерация песни: ИИ пишет текст → Mureka озвучивает → mp3 в чат с ботом.
+    При сбое — возврат средств и уведомление."""
+    from . import limits
+    from . import music
+    from .ai import generate_song_lyrics
+
+    try:
+        async with limits.gen_slot():
+            lyrics = await generate_song_lyrics(topic, style=style, lang=lang)
+            fname, blob = await music.make_song(lyrics, style, topic[:50])
+        if bot_ref.bot is not None:
+            from aiogram.types import BufferedInputFile
+            cap = {"ru": "🎵 Готовая песня. Тема: ", "uz": "🎵 Tayyor qo'shiq. Mavzu: ",
+                   "en": "🎵 Your song is ready. Topic: "}.get(lang, "🎵 Готовая песня. Тема: ")
+            await bot_ref.bot.send_audio(
+                target_id, BufferedInputFile(blob, fname), caption=f"{cap}{topic}", parse_mode=None,
+            )
+    except Exception:
+        log.exception("Фоновая генерация песни не удалась")
+        async with dbmod.SessionLocal() as db:
+            u = await svc.get_or_create_user(db, uid)
+            await svc.refund(db, u, charged)
+        if bot_ref.bot is not None:
+            try:
+                msg = {"ru": "❌ Не удалось создать песню. Средства возвращены, попробуйте ещё раз.",
+                       "uz": "❌ Qo'shiq yaratilmadi. Mablag' qaytarildi, qayta urinib ko'ring.",
+                       "en": "❌ Couldn't create the song. You were refunded, please try again."}.get(lang)
+                await bot_ref.bot.send_message(target_id, msg, parse_mode=None)
+            except Exception:
+                pass
+
+
 # ---------------------------------------------------------------- схемы запросов
 
 class NameIn(BaseModel):
@@ -285,6 +318,7 @@ class SettingsIn(BaseModel):
     price_presentation: int | None = Field(None, ge=0, le=100_000_000)
     price_test: int | None = Field(None, ge=0, le=100_000_000)
     price_referat: int | None = Field(None, ge=0, le=100_000_000)
+    price_song: int | None = Field(None, ge=0, le=100_000_000)
     card_number: str | None = None
     card_holder: str | None = None
     topup_amounts: str | None = None
@@ -362,6 +396,12 @@ class MafiaStartIn(BaseModel):
     day_seconds: int | None = None  # время дневного обсуждения, задаёт организатор
 
 
+class SongIn(BaseModel):
+    topic: str
+    style: str = ""
+    lang: str = "ru"
+
+
 class SupportIn(BaseModel):
     text: str
 
@@ -409,7 +449,9 @@ def create_app() -> FastAPI:
         data["prices"] = {
             "presentation": svc._price(cfg, "presentation"),
             "test": svc._price(cfg, "test"),
+            "song": svc._price(cfg, "song"),
         }
+        data["song_enabled"] = svc.song_enabled()  # услуга «Песня» доступна (подключён Mureka)
         if user.is_teacher:
             data["active_session"] = await svc.active_session(db, user)
         return data
@@ -713,6 +755,23 @@ def create_app() -> FastAPI:
         group = (body.group or "").strip()
         asyncio.create_task(_run_presentation(
             user.id, request.state.real_user_id, topic, lang, slides, author, group, book_ids, charged
+        ))
+        return {"ok": True, "queued": True}
+
+    @app.post("/api/ai/song")
+    async def ai_song(body: SongIn, request: Request, user: User = Depends(current_user),
+                      db: AsyncSession = Depends(get_db)):
+        """Создать песню (только в приложении). Платно для ВСЕХ (дорого). Генерим в фоне,
+        готовый mp3 прилетает в чат с ботом."""
+        if not svc.song_enabled():
+            raise svc.ServiceError("Услуга «Песня» скоро появится.", 503)
+        topic = (body.topic or "").strip()
+        if not topic:
+            raise svc.ServiceError("Напишите тему песни.")
+        lang = body.lang if body.lang in ("ru", "uz", "en") else "ru"
+        charged = await svc.charge_feature(db, user, "song", force=True)  # платят все
+        asyncio.create_task(_run_song(
+            user.id, request.state.real_user_id, topic, (body.style or "").strip(), lang, charged
         ))
         return {"ok": True, "queued": True}
 

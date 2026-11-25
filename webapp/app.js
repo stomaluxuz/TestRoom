@@ -451,7 +451,12 @@ async function boot() {
     try { localStorage.setItem("langSynced", "1"); } catch (e) {}
   }
   updateActBar();
-  if (!ME.full_name) go(nameScreen); else home();
+  // Глубокая ссылка из бота: «#song» — сразу открыть экран создания песни.
+  let wantSong = false;
+  try { wantSong = (location.hash || "").replace("#", "") === "song"; } catch (e) {}
+  if (!ME.full_name) go(nameScreen);
+  else if (wantSong && ME.song_enabled) { home(); go(songScreen); }
+  else home();
 }
 
 function setActAs(id) {
@@ -957,6 +962,7 @@ async function studentHome() {
     </div>
     ${payCard}
     <div class="item" id="games"><span class="ico">🎮</span><div class="grow">${quizT().games_entry}</div><span class="muted">›</span></div>
+    ${ME.song_enabled ? `<div class="item" id="song"><span class="ico">🎵</span><div class="grow">${songT().title.replace("🎵 ", "")}</div><span class="muted">›</span></div>` : ""}
     <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
     ${extra}
     <h2>${t("my_results")}</h2>
@@ -970,6 +976,7 @@ async function studentHome() {
   code.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
   on("#join", "click", join);
   on("#games", "click", () => go(gamesScreen));
+  on("#song", "click", () => go(songScreen));
   on("#homesupport", "click", () => go(supportScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#topup", "click", () => {
@@ -1237,6 +1244,7 @@ async function teacherHome() {
     <div class="item" id="history"><span class="ico">🕘</span><div class="grow">${t("history")}</div></div>
     <div class="item" id="presstudio"><span class="ico">🖥</span><div class="grow">${(PRESF[LANG] || PRESF.ru).title} (ИИ)</div><span class="muted">›</span></div>
     <div class="item" id="games"><span class="ico">🎮</span><div class="grow">${quizT().games_entry}</div><span class="muted">›</span></div>
+    ${ME.song_enabled ? `<div class="item" id="song"><span class="ico">🎵</span><div class="grow">${songT().title.replace("🎵 ", "")}</div><span class="muted">›</span></div>` : ""}
     <div class="item" id="aichat"><span class="ico">💬</span><div class="grow">${t("ai_assistant")}</div>${ME.is_pro_plus || ME.is_admin ? "" : `<span class="badge pro">Pro+</span>`}<span class="muted">›</span></div>
     <div class="item" id="library"><span class="ico">📚</span><div class="grow">${libT().lib}</div><span class="muted">›</span></div>
     <div class="item" id="libupload"><span class="ico">⬆️</span><div class="grow">${libT().upload}</div></div>
@@ -1258,6 +1266,7 @@ async function teacherHome() {
   on("#history", "click", () => go(historyScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#games", "click", () => go(gamesScreen));
+  on("#song", "click", () => go(songScreen));
   on("#aichat", "click", () => go(aiChatScreen));
   on("#library", "click", () => go(libraryScreen));
   on("#libupload", "click", () => go(libraryUploadScreen));
@@ -1819,6 +1828,8 @@ async function paymentsTab(body) {
       <input id="pt" type="number" min="0" value="${cfg.price_test}">
       <label>Цена реферата (сум)</label>
       <input id="pr" type="number" min="0" value="${cfg.price_referat ?? 5000}">
+      <label>Цена песни (сум) — платят все</label>
+      <input id="psg" type="number" min="0" value="${cfg.price_song ?? 15000}">
       <label>Номер карты</label>
       <input id="card" value="${esc(cfg.card_number)}">
       <label>Владелец карты</label>
@@ -1847,6 +1858,7 @@ async function paymentsTab(body) {
       price_presentation: +document.getElementById("pp").value || 0,
       price_test: +document.getElementById("pt").value || 0,
       price_referat: +document.getElementById("pr").value || 0,
+      price_song: +document.getElementById("psg").value || 0,
       card_number: document.getElementById("card").value.trim(),
       card_holder: document.getElementById("holder").value.trim(),
       topup_amounts: document.getElementById("amts").value.trim(),
@@ -2778,6 +2790,73 @@ async function mafiaPlayScreen({ game_id, player_id }) {
   render(`<div class="center muted">${t("loading")}</div>`);
   await load();
   timers.push(setInterval(load, 1500));
+}
+
+/* ================================================================ создание песни */
+
+const SONG = {
+  ru: {
+    title: "🎵 Создать песню", topic_ph: "О чём песня? Напишите тему",
+    style_label: "Стиль", lang_label: "Язык песни",
+    styles: { pop: "Поп", rap: "Рэп", kids: "Детская", epic: "Эпичная", lyric: "Лирическая", folk: "Народная" },
+    paid_note: "💰 Платно для всех: {p} сум — спишется с баланса при создании.",
+    create: "🎵 Создать", need_topic: "Напишите тему песни.",
+    queued: "🎵 Песня генерируется! Готовый файл придёт в чат с ботом (это займёт пару минут).",
+  },
+  uz: {
+    title: "🎵 Qo'shiq yaratish", topic_ph: "Qo'shiq nima haqida? Mavzuni yozing",
+    style_label: "Uslub", lang_label: "Qo'shiq tili",
+    styles: { pop: "Pop", rap: "Rep", kids: "Bolalar", epic: "Epik", lyric: "Lirik", folk: "Xalq" },
+    paid_note: "💰 Hamma uchun pullik: {p} so'm — yaratishda balansdan yechiladi.",
+    create: "🎵 Yaratish", need_topic: "Qo'shiq mavzusini yozing.",
+    queued: "🎵 Qo'shiq tayyorlanmoqda! Tayyor fayl bot chatiga keladi (bir necha daqiqa).",
+  },
+  en: {
+    title: "🎵 Create a song", topic_ph: "What's the song about? Enter a topic",
+    style_label: "Style", lang_label: "Song language",
+    styles: { pop: "Pop", rap: "Rap", kids: "Kids", epic: "Epic", lyric: "Lyrical", folk: "Folk" },
+    paid_note: "💰 Paid for everyone: {p} so'm — charged from your balance on create.",
+    create: "🎵 Create", need_topic: "Enter a song topic.",
+    queued: "🎵 Your song is being generated! The file will arrive in the bot chat (a couple of minutes).",
+  },
+};
+function songT() { return SONG[LANG] || SONG.ru; }
+
+async function songScreen() {
+  const S = songT();
+  const price = (ME.prices && ME.prices.song) || 0;
+  let style = "pop", lang = LANG;
+  render(`
+    ${langBar()}
+    <h1>${S.title}</h1>
+    <div class="card">
+      <input id="stopic" class="field" placeholder="${esc(S.topic_ph)}" maxlength="200" autocomplete="off">
+      <label class="muted small" style="display:block;margin-top:8px">${S.style_label}</label>
+      <div class="chips" id="sstyle">
+        ${Object.entries(S.styles).map(([k, v]) => `<span class="chip ${k === style ? "on" : ""}" data-s="${k}">${v}</span>`).join("")}
+      </div>
+      <label class="muted small" style="display:block;margin-top:6px">${S.lang_label}</label>
+      <div class="langpick" id="slang">
+        ${["ru", "uz", "en"].map(l => `<button class="lbtn ${l === lang ? "on" : ""}" data-l="${l}">${l === "ru" ? "🇷🇺 Рус" : l === "uz" ? "🇺🇿 Ўзб" : "🇬🇧 Eng"}</button>`).join("")}
+      </div>
+      <p class="muted small" style="margin:12px 0 4px">${S.paid_note.replace("{p}", fmtSum(price))}</p>
+      <button class="btn" id="smake">${S.create}</button>
+    </div>
+  `);
+  onAll("#sstyle .chip", "click", el => { style = el.dataset.s; $app.querySelectorAll("#sstyle .chip").forEach(c => c.classList.toggle("on", c === el)); });
+  onAll("#slang .lbtn", "click", el => { lang = el.dataset.l; $app.querySelectorAll("#slang .lbtn").forEach(b => b.classList.toggle("on", b === el)); });
+  on("#smake", "click", async () => {
+    const topic = (document.getElementById("stopic").value || "").trim();
+    if (!topic) { toast(S.need_topic); return; }
+    const styleName = (songT().styles[style]) || style;
+    const btn = document.getElementById("smake"); btn.disabled = true;
+    try {
+      await api("/api/ai/song", { json: { topic, style: styleName, lang } });
+      haptic("success"); toast(S.queued);
+      try { tg && tg.close(); } catch (e) {}  // уходим в чат бота, куда придёт файл
+      home();
+    } catch (e) { haptic("error"); toast(e.message); btn.disabled = false; }
+  });
 }
 
 boot();

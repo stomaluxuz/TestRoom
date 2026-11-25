@@ -80,6 +80,39 @@ async def test_ai_presentation_endpoint(client, monkeypatch):
         assert (await svc.get_or_create_user(db, 900)).balance == 95000
 
 
+async def test_song_endpoint(client, monkeypatch):
+    """Песня: без ключа Mureka — 503; с ключом — ставится в очередь и платят ВСЕ."""
+    from app import api as apimod
+    from app import db as dbmod
+    from app import services as svc
+    from app.config import settings as cfg
+
+    calls = []
+
+    async def fake_run(*a, **k):
+        calls.append(a)
+
+    monkeypatch.setattr(apimod, "_run_song", fake_run)
+
+    H = headers(ADMIN_ID)  # админ-преподаватель — всё равно платит
+    await client.post("/api/me/name", headers=H, json={"full_name": "Поющий Админ"})
+
+    monkeypatch.setattr(cfg, "mureka_api_key", "")  # услуга выключена
+    assert (await client.post("/api/ai/song", headers=H, json={"topic": "Кариес"})).status_code == 503
+    assert not calls
+
+    monkeypatch.setattr(cfg, "mureka_api_key", "test-key")  # включаем
+    async with dbmod.SessionLocal() as db:
+        u = await svc.get_or_create_user(db, ADMIN_ID)
+        u.balance = 100000
+        await db.commit()
+    r = await client.post("/api/ai/song", headers=H, json={"topic": "Кариес", "style": "Поп"})
+    assert r.status_code == 200 and r.json().get("queued") is True
+    assert len(calls) == 1
+    async with dbmod.SessionLocal() as db:
+        assert (await svc.get_or_create_user(db, ADMIN_ID)).balance == 85000  # 100000 − 15000, с админа тоже
+
+
 async def test_quiz_endpoints_flow(client, monkeypatch):
     """Живой куиз через HTTP: учитель создаёт (ИИ замокан), студент входит, играет, финал."""
     from app import ai as aimod
