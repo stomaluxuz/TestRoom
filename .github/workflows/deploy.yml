@@ -1,8 +1,11 @@
 name: Deploy to VPS
 
 # Автодеплой: любой push в main (или ручной запуск) выкатывает код на сервер.
-# Нужен один секрет репозитория: DEPLOY_SSH_KEY — приватный ключ деплоя (~/.ssh/testroom_deploy).
-# Остальные ключи (ANTHROPIC/VOYAGE/BOT_TOKEN) уже лежат в /opt/testroom/.env на сервере — их не трогаем.
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   DEPLOY_SSH_KEY   — приватный ключ деплоя (~/.ssh/testroom_deploy). Обязателен.
+#   ANTHROPIC_API_KEY — ключ ИИ. Если задан, при каждом деплое прописывается в /opt/testroom/.env
+#                       (точечно, одну строку; остальной .env не трогаем). Пусто — оставляем как есть.
+# Прочие ключи (VOYAGE/BOT_TOKEN) уже лежат в /opt/testroom/.env на сервере — их не трогаем.
 
 on:
   push:
@@ -37,15 +40,27 @@ jobs:
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no /tmp/upd.tar.gz root@212.47.58.69:/root/upd.tar.gz
 
       - name: Развернуть и перезапустить
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@212.47.58.69 'bash -s' <<'EOF'
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@212.47.58.69 "bash -s -- '$ANTHROPIC_API_KEY'" <<'EOF'
           set -e
+          AKEY="${1:-}"
           tar -xzf /root/upd.tar.gz -C /opt/testroom
           # OCR сканов: системный tesseract + языки (ставим один раз, если ещё нет; сбой не ломает деплой)
           if ! command -v tesseract >/dev/null 2>&1; then
             (apt-get update -qq && apt-get install -y -qq tesseract-ocr tesseract-ocr-rus tesseract-ocr-uzb tesseract-ocr-uzb-cyrl tesseract-ocr-eng) || echo "tesseract install failed (OCR останется выключенным)"
           fi
           /opt/testroom/.venv/bin/pip install -q -r /opt/testroom/requirements.txt
+          # Ключ ИИ: если передан секрет — точечно обновляем ОДНУ строку в серверном .env, остальное не трогаем.
+          if [ -n "$AKEY" ]; then
+            touch /opt/testroom/.env
+            sed -i '/^ANTHROPIC_API_KEY=/d' /opt/testroom/.env
+            printf 'ANTHROPIC_API_KEY=%s\n' "$AKEY" >> /opt/testroom/.env
+            echo "ANTHROPIC_API_KEY: обновлён в .env"
+          else
+            echo "ANTHROPIC_API_KEY: секрет не задан — .env не трогаем"
+          fi
           systemctl restart testroom
           rm -f /root/upd.tar.gz
           sleep 5
