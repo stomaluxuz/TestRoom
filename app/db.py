@@ -108,6 +108,14 @@ def _migrate(conn):
         gcols = {c["name"] for c in insp.get_columns("quiz_games")}
         if "auto" not in gcols:  # авто-переход вопросов
             conn.execute(text("ALTER TABLE quiz_games ADD COLUMN auto BOOLEAN NOT NULL DEFAULT 1"))
+    if insp.has_table("courses"):
+        ccols = {c["name"] for c in insp.get_columns("courses")}
+        if "subject_id" not in ccols:
+            conn.execute(text("ALTER TABLE courses ADD COLUMN subject_id INTEGER"))
+        if "year" not in ccols:
+            conn.execute(text("ALTER TABLE courses ADD COLUMN year INTEGER NOT NULL DEFAULT 0"))
+        if "semester" not in ccols:
+            conn.execute(text("ALTER TABLE courses ADD COLUMN semester INTEGER NOT NULL DEFAULT 0"))
 
 
 def _sqlite_file(url: str) -> str | None:

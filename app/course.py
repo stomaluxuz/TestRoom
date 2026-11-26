@@ -18,14 +18,21 @@ TEST_PER_TOPIC = 10
 
 
 async def create_course(db: AsyncSession, owner: User, title: str, info: str, lang: str,
-                        topics: list[str]) -> Course:
+                        topics: list[str], subject_id: int | None = None,
+                        year: int = 0, semester: int = 0) -> Course:
     """Создать курс с темами (status pending). Генерацию запускает эндпоинт в фоне."""
     require_teacher(owner)
     clean = [" ".join((t or "").split())[:400] for t in (topics or []) if (t or "").strip()][:MAX_TOPICS]
     if not clean:
         raise ServiceError("Не из чего собрать курс — список тем пуст.")
+    year = year if 0 <= year <= 7 else 0
+    semester = semester if semester in (0, 1, 2) else 0
+    info = (info or "").strip()
+    if not info and year:  # соберём подпись из курса/семестра
+        info = f"{year} курс" + (f", {semester} семестр" if semester else "")
     course = Course(
-        owner_id=owner.id, title=(title or "Курс").strip()[:300], info=(info or "").strip()[:300],
+        owner_id=owner.id, title=(title or "Курс").strip()[:300], info=info[:300],
+        subject_id=subject_id or None, year=year, semester=semester,
         lang=lang if lang in ("ru", "uz", "en") else "ru", status="building", published=True,
     )
     db.add(course)
@@ -36,13 +43,15 @@ async def create_course(db: AsyncSession, owner: User, title: str, info: str, la
     return course
 
 
-async def _build_one(db: AsyncSession, title: str, course_title: str, lang: str, topic: CourseTopic):
-    """Сгенерировать теорию и тест для одной темы (ИИ не держит соединение с БД)."""
+async def _build_one(db: AsyncSession, title: str, course_title: str, lang: str,
+                     topic: CourseTopic, only_docs: set[int] | None = None):
+    """Сгенерировать теорию и тест для одной темы (ИИ не держит соединение с БД).
+    only_docs — книги выбранного предмета: генерим строго по ним (RAG по предмету)."""
     from . import ai, limits
     from .services import library_context
 
     try:
-        ctx = await library_context(db, title)
+        ctx = await library_context(db, title, only_docs=only_docs) if only_docs else await library_context(db, title)
     except Exception:
         ctx = {"context": "", "sources": []}
     await db.rollback()  # освобождаем соединение на время ИИ
@@ -64,14 +73,20 @@ async def _build_one(db: AsyncSession, title: str, course_title: str, lang: str,
 async def build_course(course_id: int, notify=None):
     """Фоновая сборка: по каждой теме генерим теорию+тест. По готовности — status=ready и уведомление."""
     from . import db as dbmod
+    from .models import LibraryDoc
 
     async with dbmod.SessionLocal() as db:
         course = await db.get(Course, course_id)
         if course is None:
             return
-        course_title, lang, owner_id = course.title, course.lang, course.owner_id
+        course_title, lang, owner_id, subject_id = course.title, course.lang, course.owner_id, course.subject_id
         topic_ids = [t.id for t in await db.scalars(
             select(CourseTopic).where(CourseTopic.course_id == course_id).order_by(CourseTopic.position))]
+        only_docs = None
+        if subject_id:  # книги выбранного предмета → генерим строго по ним
+            ids = list(await db.scalars(select(LibraryDoc.id).where(
+                LibraryDoc.subject_id == subject_id, LibraryDoc.status == "approved")))
+            only_docs = set(ids) if ids else None
     done = 0
     for tid in topic_ids:
         async with dbmod.SessionLocal() as db:
@@ -79,7 +94,7 @@ async def build_course(course_id: int, notify=None):
             if topic is None:
                 continue
             try:
-                await _build_one(db, topic.title, course_title, lang, topic)
+                await _build_one(db, topic.title, course_title, lang, topic, only_docs)
                 done += 1
             except Exception:
                 async with dbmod.SessionLocal() as db2:

@@ -2259,17 +2259,28 @@ async function libraryTab(body) {
 // ---- админ: курсы из силлабуса
 async function coursesTab(body) {
   body.innerHTML = `<div class="muted">Загрузка…</div>`;
-  let courses;
-  try { courses = await api("/api/admin/courses"); } catch (e) { return toast(e.message); }
+  let courses, subjects;
+  try {
+    courses = await api("/api/admin/courses");
+    subjects = await api("/api/library/subjects");
+  } catch (e) { return toast(e.message); }
   let lang = "ru";
   body.innerHTML = `
     <div class="card">
       <h2 style="margin-top:0">🎓 Создать курс из силлабуса</h2>
-      <p class="muted small" style="margin:0 0 8px">Загрузите силлабус (.pdf / .docx / .txt) — ИИ вытащит список тем, вы подтвердите, дальше он сам напишет теорию и тесты по каждой теме.</p>
-      <input id="syl" type="file" accept=".pdf,.docx,.txt">
-      <div class="langpick" id="clang" style="margin-top:8px">
+      <p class="muted small" style="margin:0 0 8px">Выберите предмет и курс, затем загрузите силлабус (.pdf / .docx / .txt). ИИ вытащит темы, вы подтвердите — он напишет теорию и тесты <b>по книгам выбранного предмета</b>.</p>
+      <label>Предмет</label>
+      <select id="csubj"><option value="0">— любой (по всей библиотеке) —</option>${subjects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select>
+      <div class="row" style="gap:10px">
+        <div class="grow"><label>Курс</label><select id="cyear"><option value="0">—</option>${[1, 2, 3, 4, 5, 6].map(y => `<option value="${y}">${y} курс</option>`).join("")}</select></div>
+        <div class="grow"><label>Семестр</label><select id="csem"><option value="0">—</option><option value="1">1</option><option value="2">2</option></select></div>
+      </div>
+      <label>Язык курса</label>
+      <div class="langpick" id="clang">
         ${["ru", "uz", "en"].map(l => `<button class="lbtn ${l === "ru" ? "on" : ""}" data-l="${l}">${l === "ru" ? "🇷🇺 Рус" : l === "uz" ? "🇺🇿 Ўзб" : "🇬🇧 Eng"}</button>`).join("")}
       </div>
+      <label style="display:block;margin-top:8px">Силлабус</label>
+      <input id="syl" type="file" accept=".pdf,.docx,.txt">
       <button class="btn" id="parse" style="margin-top:8px">🔍 Разобрать силлабус</button>
       <div id="draft"></div>
     </div>
@@ -2302,15 +2313,22 @@ async function coursesTab(body) {
     btn.disabled = false; btn.textContent = "🔍 Разобрать силлабус";
   });
   function showDraft(d) {
+    const subjSel = document.getElementById("csubj");
+    const subjId = +subjSel.value;
+    const subjName = subjId ? subjSel.selectedOptions[0].textContent : "";
+    const year = +document.getElementById("cyear").value;
+    const sem = +document.getElementById("csem").value;
+    const defTitle = subjName || d.title || "";
+    const defInfo = year ? `${year} курс${sem ? `, ${sem} семестр` : ""}` : (d.info || "");
     const el = document.getElementById("draft");
     el.innerHTML = `
       <hr style="border:none;border-top:1px solid var(--bg2);margin:12px 0">
-      <label>Название предмета</label><input id="ctitle" value="${esc(d.title || "")}">
-      <label>Курс / семестр</label><input id="cinfo" value="${esc(d.info || "")}">
+      <label>Название предмета</label><input id="ctitle" value="${esc(defTitle)}">
+      <label>Курс / семестр</label><input id="cinfo" value="${esc(defInfo)}">
       <label>Темы (по одной в строке) — ${(d.topics || []).length}</label>
       <textarea id="ctopics" rows="10">${(d.topics || []).map(esc).join("\n")}</textarea>
       <button class="btn" id="create" style="margin-top:8px">🚀 Создать курс</button>
-      <p class="muted small" style="margin-top:4px">ИИ соберёт теорию и тесты в фоне — отчёт придёт в бот.</p>`;
+      <p class="muted small" style="margin-top:4px">${subjId ? "Теория и тесты — строго по книгам этого предмета. " : ""}ИИ соберёт их в фоне, отчёт придёт в бот.</p>`;
     on("#create", "click", async () => {
       const title = document.getElementById("ctitle").value.trim();
       const info = document.getElementById("cinfo").value.trim();
@@ -2318,7 +2336,9 @@ async function coursesTab(body) {
       if (!topics.length) return toast("Нет тем");
       const btn = document.getElementById("create"); btn.disabled = true; btn.textContent = "Создаю…";
       try {
-        const r = await api("/api/admin/course/create", { json: { title, info, lang, topics } });
+        const r = await api("/api/admin/course/create", {
+          json: { title, info, lang, topics, subject_id: subjId || null, year, semester: sem },
+        });
         haptic("success"); toast(`Курс создаётся: ${r.topics} тем. Отчёт придёт в бот.`);
         coursesTab(body);
       } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = "🚀 Создать курс"; }

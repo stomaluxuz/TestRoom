@@ -449,6 +449,9 @@ class Course(Base):
     owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(300))
     info: Mapped[str] = mapped_column(String(300), default="")  # курс/семестр и т.п.
+    subject_id: Mapped[int | None] = mapped_column(Integer)  # предмет библиотеки — для RAG по его книгам
+    year: Mapped[int] = mapped_column(Integer, default=0)      # курс (1–6)
+    semester: Mapped[int] = mapped_column(Integer, default=0)  # семестр (1/2)
     lang: Mapped[str] = mapped_column(String(2), default="ru")
     status: Mapped[str] = mapped_column(String(12), default="building")  # building|ready
     published: Mapped[bool] = mapped_column(Boolean, default=True)  # виден студентам

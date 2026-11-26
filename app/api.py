@@ -460,6 +460,9 @@ class CourseCreateIn(BaseModel):
     info: str = ""
     lang: str = "ru"
     topics: list[str] = []
+    subject_id: int | None = None
+    year: int = Field(0, ge=0, le=7)
+    semester: int = Field(0, ge=0, le=2)
 
 
 class TopicTestIn(BaseModel):
@@ -1391,7 +1394,9 @@ def create_app() -> FastAPI:
     async def a_course_create(body: CourseCreateIn, admin: User = Depends(admin_user),
                               db: AsyncSession = Depends(get_db)):
         """Создать курс из подтверждённого списка тем и запустить фоновую генерацию."""
-        course = await coursemod.create_course(db, admin, body.title, body.info, body.lang, body.topics)
+        course = await coursemod.create_course(
+            db, admin, body.title, body.info, body.lang, body.topics,
+            subject_id=body.subject_id, year=body.year, semester=body.semester)
         asyncio.create_task(coursemod.build_course(course.id, notify=_course_notify))
         return {"course_id": course.id, "topics": len(body.topics), "queued": True}
 
