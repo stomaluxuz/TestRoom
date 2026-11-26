@@ -2001,6 +2001,7 @@ async function editorScreen({ id }) {
     ${langBar()}
     <h1 class="ell">${esc(test.title)}</h1>
     <p class="muted">${test.questions.length} ${t("questions_word")}</p>
+    ${test.questions.length && ME.is_teacher ? `<button class="btn" id="launch">▶️ ${t("launch_test")}</button>` : ""}
     <div id="list">${test.questions.map((q, i) => `
       <div class="card" data-qi="${i}">
         <div class="row"><b>№${i + 1}</b><span><button class="link ed" data-qi="${i}">${t("edit_word")}</button></span></div>
@@ -2008,8 +2009,9 @@ async function editorScreen({ id }) {
         <div class="small right">✓ ${esc(q.options[q.correct])}</div>
         <div class="muted small">${q.options.length} ${t("options_word")}</div>
       </div>`).join("")}</div>
-    <button class="btn" id="add">${t("add_question")}</button>
+    <button class="btn secondary" id="add">${t("add_question")}</button>
   `);
+  on("#launch", "click", () => go(testScreen, { id }));
   onAll(".ed", "click", el => go(questionForm, { testId: id, q: test.questions[+el.dataset.qi] }));
   on("#add", "click", () => go(questionForm, { testId: id, q: null }));
 }
