@@ -333,3 +333,9 @@ body { background:
 .gcard.wide .gic { margin-bottom: 0; }
 .gcard.wide .wtext { flex: 1; min-width: 0; }
 .gcard .chev { color: #8a97a4; font-size: 22px; }
+
+/* Крупные современные иконки в чипе (заполняют рамку) */
+.gcard .gic { width: 52px; height: 52px; border-radius: 15px; background: rgba(255,255,255,.7);
+  box-shadow: 0 2px 6px rgba(0,0,0,.05); margin-bottom: 8px; }
+.gcard .gic svg { width: 30px; height: 30px; display: block; }
+#tabbar .tab .ti svg { width: 24px; height: 24px; display: block; }

@@ -404,10 +404,10 @@ function render(html) {
 
 /* нижнее таб-меню */
 const TABS = [
-  { id: "home", ico: "🏠", go: () => home() },
-  { id: "games", ico: "🎮", go: () => goTab(gamesScreen) },
-  { id: "library", ico: "📚", go: () => goTab(libraryScreen) },
-  { id: "profile", ico: "👤", go: () => goTab(profileScreen) },
+  { id: "home", ico: "home", go: () => home() },
+  { id: "games", ico: "gamepad", go: () => goTab(gamesScreen) },
+  { id: "library", ico: "book", go: () => goTab(libraryScreen) },
+  { id: "profile", ico: "user", go: () => goTab(profileScreen) },
 ];
 function tabLabel(id) {
   return { home: t("tab_home"), games: t("tab_games"), library: t("tab_library"), profile: t("tab_profile") }[id];
@@ -418,7 +418,7 @@ function showTabs(active) {
   document.body.classList.add("hastabs");
   bar.classList.add("on");
   bar.innerHTML = TABS.map(x => `<button class="tab ${x.id === active ? "on" : ""}" data-tab="${x.id}">
-    <span class="ti">${x.ico}</span><span class="tl">${tabLabel(x.id)}</span></button>`).join("");
+    <span class="ti">${svgIcon(x.ico)}</span><span class="tl">${tabLabel(x.id)}</span></button>`).join("");
   bar.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
     const tb = TABS.find(x => x.id === b.dataset.tab); if (tb) { haptic("light"); tb.go(); }
   }));
@@ -1021,16 +1021,36 @@ const CARD_PAL = {
   teal: { bg: "#e2f5f8", acc: "#0a9bb0" }, pink: { bg: "#fde9f1", acc: "#e23c84" },
   amber: { bg: "#fdf3dc", acc: "#d99400" }, red: { bg: "#fde9e8", acc: "#e2403d" },
 };
+// Современные line-иконки (Lucide-стиль), окрашиваются в акцент карточки (currentColor).
+const ICONS = {
+  monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 8l5-5 5 5"/><path d="M12 3v12"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  chart: '<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/>',
+  cap: '<path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1 2.7 3 6 3s6-2 6-3v-5"/>',
+  chat: '<path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
+  library: '<path d="M4 4h4v16H4z"/><path d="M10 4h4v16h-4z"/><path d="M16.5 4.5l3.5.7 2.3 14.6-3.5-.6z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 7 2.6h.1A1.6 1.6 0 0 0 8.6 1V1a2 2 0 0 1 4 0v.1A1.6 1.6 0 0 0 17 2.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.1 1.5H23a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.1z"/>',
+  home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+  gamepad: '<rect x="2" y="6" width="20" height="12" rx="5"/><path d="M7 11v3M5.5 12.5h3"/><circle cx="15.5" cy="11.5" r="1.1"/><circle cx="18" cy="14" r="1.1"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-6.5 8-6.5s8 2.3 8 6.5"/>',
+};
+function svgIcon(name) {
+  const p = ICONS[name] || ICONS.book;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
 function gcard(id, ico, label, sub, pal) {
   const p = CARD_PAL[pal] || CARD_PAL.emerald;
   return `<div class="gcard" id="${id}" style="background:${p.bg}">
-    <span class="gic" style="color:${p.acc}">${ico}</span>
+    <span class="gic" style="color:${p.acc}">${svgIcon(ico)}</span>
     <div class="gt">${label}</div>${sub ? `<div class="gs">${sub}</div>` : ""}</div>`;
 }
 function gcardWide(id, ico, label, sub, pal) {
   const p = CARD_PAL[pal] || CARD_PAL.emerald;
   return `<div class="gcard wide" id="${id}" style="background:${p.bg}">
-    <span class="gic" style="color:${p.acc}">${ico}</span>
+    <span class="gic" style="color:${p.acc}">${svgIcon(ico)}</span>
     <div class="wtext"><div class="gt">${label}</div>${sub ? `<div class="gs">${sub}</div>` : ""}</div>
     <span class="chev">›</span></div>`;
 }
@@ -1056,12 +1076,12 @@ async function studentHome() {
     ${payCard}
     <h2>${t("quick_title")}</h2>
     <div class="grid">
-      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ", "blue")}
-      ${gcard("mytests", "📖", t("my_tests_training"), t("sub_open_tests"), "violet")}
-      ${gcard("upload", "📤", t("upload_my_test"), t("sub_upload"), "orange")}
-      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "", "pink") : ""}
-      ${gcard("results", "📊", t("results_title"), t("sub_history"), "emerald")}
-      ${ME.teacher_pending ? "" : gcardWide("torole", "🎓", t("become_teacher"), t("sub_apply"), "teal")}
+      ${gcard("presstudio", "monitor", (PRESF[LANG] || PRESF.ru).title, "ИИ", "blue")}
+      ${gcard("mytests", "book", t("my_tests_training"), t("sub_open_tests"), "violet")}
+      ${gcard("upload", "upload", t("upload_my_test"), t("sub_upload"), "orange")}
+      ${ME.song_enabled ? gcard("song", "music", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "", "pink") : ""}
+      ${gcard("results", "chart", t("results_title"), t("sub_history"), "emerald")}
+      ${ME.teacher_pending ? "" : gcardWide("torole", "cap", t("become_teacher"), t("sub_apply"), "teal")}
     </div>
     ${ME.teacher_pending ? `<p class="muted small">${t("pending_teacher")}</p>` : ""}
     <button class="btn secondary" id="homesupport" style="margin-top:10px">${t("support")}</button>
@@ -1338,14 +1358,14 @@ async function teacherHome() {
       <span class="small">${esc(a.test_title)} · ${t("code")} <b>${a.code}</b> · ${t("time_left")} <span id="aleft">${fmtTime(a.seconds_left)}</span></span></div>` : ""}
     <h2>${t("quick_title")}</h2>
     <div class="grid">
-      ${gcard("tests", "📚", t("my_tests"), "", "blue")}
-      ${gcard("upload", "📤", t("upload_test"), "", "orange")}
-      ${gcard("presstudio", "🖥", (PRESF[LANG] || PRESF.ru).title, "ИИ", "violet")}
-      ${gcard("aichat", "💬", t("ai_assistant"), ME.is_pro_plus || ME.is_admin ? "" : "Pro+", "teal")}
-      ${ME.song_enabled ? gcard("song", "🎵", songT().title.replace("🎵 ", ""), "", "pink") : ""}
-      ${gcard("libupload", "⬆️", libT().upload, "", "emerald")}
-      ${gcard("history", "🕘", t("history"), "", "amber")}
-      ${ME.is_admin && !ME.acting_as ? gcard("admin", "🛠", t("admin_panel"), "", "red") : ""}
+      ${gcard("tests", "book", t("my_tests"), "", "blue")}
+      ${gcard("upload", "upload", t("upload_test"), "", "orange")}
+      ${gcard("presstudio", "monitor", (PRESF[LANG] || PRESF.ru).title, "ИИ", "violet")}
+      ${gcard("aichat", "chat", t("ai_assistant"), ME.is_pro_plus || ME.is_admin ? "" : "Pro+", "teal")}
+      ${ME.song_enabled ? gcard("song", "music", songT().title.replace("🎵 ", ""), "", "pink") : ""}
+      ${gcard("libupload", "library", libT().upload, "", "emerald")}
+      ${gcard("history", "clock", t("history"), "", "amber")}
+      ${ME.is_admin && !ME.acting_as ? gcard("admin", "settings", t("admin_panel"), "", "red") : ""}
     </div>
     ${ME.acting_as ? "" : `<button class="link" id="student">🎓 ${t("take_by_code")}</button>`}
     ${ME.is_admin || ME.acting_as ? "" : `<button class="link" id="torole">🎓 ${t("become_student")}</button>`}
