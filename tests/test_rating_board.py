@@ -115,3 +115,35 @@ async def test_unavailable_without_profile():
         u = await _student(db, 140, "Гость", "", "", True)  # нет вуза/группы
         board = await svc.rating_board(db, u, "group")
         assert board["available"] is False and board["need"] == "group"
+
+
+async def test_teacher_group_rating_ranks_by_percent():
+    async with dbmod.SessionLocal() as db:
+        teacher = await svc.get_or_create_user(db, 1)  # admin = teacher
+        s1 = await _student(db, 200, "Алиса", "ТГСИ", "101", False)  # скрыта в студ. рейтинге
+        s2 = await _student(db, 201, "Борис", "ТГСИ", "101", True)
+        sess = await _session(db, teacher.id)  # группа 101, 2 вопроса в попытке
+        await _attempt(db, sess.id, s1.id, "Алиса", 2)  # 2/2 = 100%
+        await _attempt(db, sess.id, s2.id, "Борис", 1)  # 1/2 = 50%
+        await db.commit()
+
+        assert await svc.teacher_rating_groups(db, teacher) == ["101"]
+        rows = (await svc.teacher_group_rating(db, teacher, "101"))["rows"]
+        assert [r["name"] for r in rows] == ["Алиса", "Борис"]  # по среднему %: 100 > 50
+        assert rows[0]["avg"] == 100 and rows[0]["rank"] == 1
+        assert rows[1]["avg"] == 50
+        # преподаватель видит настоящее имя скрытого студента (не «Аноним»)
+        assert "Аноним" not in [r["name"] for r in rows]
+
+
+async def test_teacher_sees_only_own_sessions():
+    async with dbmod.SessionLocal() as db:
+        teacher = await svc.get_or_create_user(db, 1)
+        other = await svc.get_or_create_user(db, 2)  # другой преподаватель
+        s1 = await _student(db, 210, "Алиса", "ТГСИ", "101", True)
+        sess_other = await _session(db, other.id)  # сессию провёл ДРУГОЙ препод
+        await _attempt(db, sess_other.id, s1.id, "Алиса", 2)
+        await db.commit()
+        # наш преподаватель тестов не проводил → ни групп, ни строк
+        assert await svc.teacher_rating_groups(db, teacher) == []
+        assert (await svc.teacher_group_rating(db, teacher, "101"))["rows"] == []

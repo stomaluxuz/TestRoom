@@ -205,6 +205,10 @@ label { display: block; margin-top: 12px; font-size: 13px; color: var(--hint); }
 .rmed .rnum { font-size: 15px; font-weight: 700; color: var(--hint); }
 .rpts { font-weight: 700; color: var(--brand); white-space: nowrap; }
 .rpts span { font-size: 11px; font-weight: 600; color: var(--hint); }
+.ravg { font-weight: 800; font-size: 16px; white-space: nowrap; padding: 3px 9px; border-radius: 10px; }
+.ravg.ok { color: #0a7d52; background: rgba(14,164,127,.14); }
+.ravg.mid { color: #b06a00; background: rgba(217,148,0,.15); }
+.ravg.low { color: #c0362f; background: rgba(226,64,61,.13); }
 .actbar.hidden { display: none; }
 .credit { width: 100%; margin: 0 auto; padding: 10px 14px 30px; text-align: center;
   color: var(--hint); font-size: 13px; display: none; }

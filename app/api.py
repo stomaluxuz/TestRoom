@@ -604,6 +604,16 @@ def create_app() -> FastAPI:
     async def subjects(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         return await svc.list_subjects(db, user)
 
+    @app.get("/api/teacher/rating/groups")
+    async def teacher_rating_groups(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Группы, по которым преподаватель проводил тесты."""
+        return await svc.teacher_rating_groups(db, user)
+
+    @app.get("/api/teacher/rating")
+    async def teacher_rating(group: str = "", user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Успеваемость студентов выбранной группы по тестам преподавателя."""
+        return await svc.teacher_group_rating(db, user, group)
+
     @app.post("/api/teacher/subjects")
     async def add_subject(body: SubjectIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         s = await svc.create_subject(db, user, body.name)

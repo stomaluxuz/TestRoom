@@ -1381,6 +1381,58 @@ async def rating_board(db: AsyncSession, user: User, scope: str = "group", limit
             "top": top, "me": my_row, "rating_public": bool(user.rating_public)}
 
 
+async def teacher_rating_groups(db: AsyncSession, teacher: User) -> list[str]:
+    """Группы, по которым преподаватель проводил тесты (для выбора в рейтинге)."""
+    require_teacher(teacher)
+    rows = await db.scalars(
+        select(TestSession.group_name).where(
+            TestSession.teacher_id == teacher.id, TestSession.solo.is_(False)).distinct())
+    groups = {(g or "").strip() for g in rows if (g or "").strip()}
+    return sorted(groups, key=lambda s: s.casefold())
+
+
+async def teacher_group_rating(db: AsyncSession, teacher: User, group: str) -> dict:
+    """Успеваемость студентов одной группы по тестам этого преподавателя.
+    Настоящие имена (переключатель приватности студента на преподавателя не влияет),
+    первая зачётная попытка по каждому тесту, сортировка по среднему проценту."""
+    require_teacher(teacher)
+    group = (group or "").strip()
+    if not group:
+        return {"group": group, "rows": []}
+    rows = (await db.execute(
+        select(Attempt.user_id, TestSession.test_id, Attempt.correct_count,
+               Attempt.question_order, Attempt.full_name, Attempt.started_at)
+        .join(TestSession, TestSession.id == Attempt.session_id)
+        .where(TestSession.teacher_id == teacher.id, TestSession.group_name == group,
+               TestSession.solo.is_(False), Attempt.finished_at.is_not(None))
+        .order_by(Attempt.started_at.asc())
+    )).all()
+    first: dict[tuple[int, int], tuple[int, int, str]] = {}  # (user,test) -> (верно, всего, имя)
+    for uid, test_id, correct, qorder, name, _started in rows:
+        key = (uid, test_id)
+        if key not in first:
+            first[key] = (correct or 0, len(qorder or []), name)
+    agg: dict[int, dict] = {}
+    for (uid, _t), (correct, total, name) in first.items():
+        a = agg.setdefault(uid, {"correct": 0, "total": 0, "tests": 0, "name": name})
+        a["correct"] += correct
+        a["total"] += total
+        a["tests"] += 1
+    ids = list(agg.keys())
+    users = {u.id: u for u in await db.scalars(select(User).where(User.id.in_(ids)))} if ids else {}
+    out = []
+    for uid, a in agg.items():
+        u = users.get(uid)
+        name = (u.full_name if (u and u.full_name) else a["name"]) or "—"
+        avg = round(100 * a["correct"] / a["total"]) if a["total"] else 0
+        out.append({"user_id": uid, "name": name, "avg": avg,
+                    "points": a["correct"], "tests": a["tests"]})
+    out.sort(key=lambda r: (-r["avg"], -r["tests"], r["name"].casefold()))
+    for i, r in enumerate(out):
+        r["rank"] = i + 1
+    return {"group": group, "rows": out}
+
+
 # ---------------------------------------------------------------- учитель: статистика
 
 async def active_session(db: AsyncSession, teacher: User) -> dict | None:
