@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import course as coursemod
 from . import db as dbmod
 from . import mafia as mafiamod
 from . import quiz as quizmod
@@ -258,6 +259,17 @@ async def _run_bulk_import(admin_id: int, saved: list[dict]):
             pass
 
 
+async def _course_notify(owner_id: int, title: str, done: int, total: int):
+    if bot_ref.bot is None:
+        return
+    try:
+        await bot_ref.bot.send_message(
+            owner_id, f"🎓 Курс «{title}» собран: готово {done} из {total} тем. "
+            "Откройте админку → Курсы, чтобы проверить.", parse_mode=None)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------- схемы запросов
 
 class NameIn(BaseModel):
@@ -441,6 +453,18 @@ class SongIn(BaseModel):
 
 class SupportIn(BaseModel):
     text: str
+
+
+class CourseCreateIn(BaseModel):
+    title: str
+    info: str = ""
+    lang: str = "ru"
+    topics: list[str] = []
+
+
+class TopicTestIn(BaseModel):
+    correct: int = Field(0, ge=0, le=1000)
+    total: int = Field(0, ge=0, le=1000)
 
 
 # ---------------------------------------------------------------- приложение
@@ -1325,6 +1349,81 @@ def create_app() -> FastAPI:
             raise svc.ServiceError("Не выбрано ни одного файла.")
         asyncio.create_task(_run_bulk_import(admin.id, saved))
         return {"ok": True, "count": len(saved), "queued": True}
+
+    # ------------------------------------------------ учебный путь (курсы из силлабуса)
+    @app.post("/api/admin/course/parse")
+    async def a_course_parse(file: UploadFile = File(...), lang: str = Form("ru"),
+                             admin: User = Depends(admin_user)):
+        """Загрузка силлабуса → ИИ извлекает список тем (черновик, курс ещё не создаётся)."""
+        from .ai import parse_syllabus
+        from .parsers import extract_document_text_path
+        import os
+        import tempfile
+
+        os.makedirs(settings.library_dir, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=settings.library_dir)
+        try:
+            size = 0
+            with os.fdopen(fd, "wb") as out:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > MAX_UPLOAD:
+                        raise svc.ServiceError("Файл силлабуса больше 10 МБ.")
+                    out.write(chunk)
+            try:
+                text = await asyncio.to_thread(extract_document_text_path, file.filename or "", tmp)
+            except Exception:
+                raise svc.ServiceError("Не удалось прочитать файл. Поддерживаются .pdf, .docx, .txt.")
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        lang = lang if lang in ("ru", "uz", "en") else "ru"
+        draft = await parse_syllabus(text, lang)
+        draft["lang"] = lang
+        return draft
+
+    @app.post("/api/admin/course/create")
+    async def a_course_create(body: CourseCreateIn, admin: User = Depends(admin_user),
+                              db: AsyncSession = Depends(get_db)):
+        """Создать курс из подтверждённого списка тем и запустить фоновую генерацию."""
+        course = await coursemod.create_course(db, admin, body.title, body.info, body.lang, body.topics)
+        asyncio.create_task(coursemod.build_course(course.id, notify=_course_notify))
+        return {"course_id": course.id, "topics": len(body.topics), "queued": True}
+
+    @app.get("/api/admin/courses")
+    async def a_courses(admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+        return await coursemod.admin_courses(db)
+
+    @app.delete("/api/admin/courses/{course_id}")
+    async def a_course_delete(course_id: int, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+        await coursemod.delete_course(db, course_id)
+        return {"ok": True}
+
+    @app.get("/api/courses")
+    async def courses_list(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await coursemod.list_courses(db)
+
+    @app.get("/api/courses/{course_id}")
+    async def course_detail(course_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await coursemod.course_detail(db, user, course_id)
+
+    @app.get("/api/courses/topics/{topic_id}")
+    async def course_topic(topic_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await coursemod.topic_detail(db, user, topic_id)
+
+    @app.post("/api/courses/topics/{topic_id}/read")
+    async def course_topic_read(topic_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await coursemod.mark_read(db, user, topic_id)
+
+    @app.post("/api/courses/topics/{topic_id}/test")
+    async def course_topic_test(topic_id: int, body: TopicTestIn, user: User = Depends(current_user),
+                                db: AsyncSession = Depends(get_db)):
+        return await coursemod.submit_topic_test(db, user, topic_id, body.correct, body.total)
 
     # ------------------------------------------------ сам Mini App
     @app.get("/")

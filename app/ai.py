@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 import anthropic
 
@@ -321,6 +322,71 @@ async def detect_book_meta(sample_text: str) -> str:
         return ""
     title = " ".join((title or "").split()).strip('"«».')
     return "" if is_no_title(title) else title[:200]
+
+
+SYSTEM_SYLLABUS = "Ты точно разбираешь учебную программу (силлабус). Возвращай строго запрошенный формат, без пояснений."
+
+
+async def parse_syllabus(sample_text: str, lang: str = "ru") -> dict:
+    """Извлекает из силлабуса название предмета, курс/семестр и СПИСОК ТЕМ по порядку."""
+    sample = " ".join((sample_text or "").split())[:MAX_MATERIAL_CHARS]
+    if not sample:
+        raise _err("Пустой файл силлабуса.")
+    prompt = (
+        "Ниже — силлабус (учебная программа предмета). Извлеки из него:\n"
+        "1) НАЗВАНИЕ предмета; 2) курс/семестр (если указаны); 3) СПИСОК ТЕМ занятий по порядку.\n\n"
+        "Ответь СТРОГО в таком формате (без лишнего):\n"
+        "TITLE: <название предмета>\nINFO: <курс/семестр или ->\nTOPICS:\n- <тема 1>\n- <тема 2>\n...\n\n"
+        "Бери только реальные темы занятий из программы (не цели/литературу/оценивание). "
+        f"{_lang_instr(lang)}\n\nСИЛЛАБУС:\n{sample}"
+    )
+    out = await _ask(SYSTEM_SYLLABUS, prompt, max_tokens=2500, effort="low")
+    title, info, topics = "", "", []
+    in_topics = False
+    for line in (out or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        up = s.upper()
+        if up.startswith("TITLE:"):
+            title = s.split(":", 1)[1].strip()
+        elif up.startswith("INFO:"):
+            info = s.split(":", 1)[1].strip().strip("-").strip()
+        elif up.startswith("TOPICS"):
+            in_topics = True
+        elif in_topics or s.startswith(("-", "•", "*")) or re.match(r"^\d+[.)]", s):
+            tp = re.sub(r"^[-•*\d.)\s]+", "", s).strip()
+            if len(tp) >= 3:
+                topics.append(tp[:400])
+    # убираем дубли, сохраняя порядок
+    seen, uniq = set(), []
+    for tp in topics:
+        k = tp.lower()
+        if k not in seen:
+            seen.add(k)
+            uniq.append(tp)
+    return {"title": (title[:300] or "Курс"), "info": info[:300], "topics": uniq[:40]}
+
+
+SYSTEM_THEORY = (
+    "Ты — преподаватель. Пишешь краткий, понятный учебный КОНСПЕКТ по теме: суть, определения, "
+    "ключевые факты и механизмы — структурно и по делу, чтобы студент понял тему перед тестом. "
+    "Без воды, без вступлений «в этой теме мы рассмотрим». Можно подзаголовки и списки."
+)
+
+
+async def generate_theory(topic: str, course_title: str = "", lang: str = "ru", context: str = "") -> str:
+    """Короткий учебный конспект по теме (для учебного пути). context — выдержки из библиотеки (RAG)."""
+    topic = " ".join((topic or "").split())
+    if not topic:
+        raise _err("Пустая тема.")
+    ctx = _context_block(context) if context else ""
+    about = f" (предмет: {course_title})" if course_title else ""
+    prompt = (
+        f"{ctx}Напиши учебный КОНСПЕКТ по теме: «{topic}»{about}. "
+        f"Объём ~300–550 слов, структурно (подзаголовки/списки), чтобы студент понял суть.\n{_lang_instr(lang)}"
+    )
+    return await _ask(SYSTEM_THEORY, prompt, max_tokens=1800, effort="low")
 
 
 async def classify_book_subject(sample_text: str, subjects: list[str]) -> str:

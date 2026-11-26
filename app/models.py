@@ -436,3 +436,52 @@ class MafiaAction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     __table_args__ = (UniqueConstraint("game_id", "round", "kind", "actor_id", name="uq_mafia_action"),)
+
+
+# ------------------------------------------------ учебный курс из силлабуса (строит ИИ)
+
+class Course(Base):
+    """Курс: предмет со структурой тем. ИИ по силлабусу генерит теорию и тесты по темам."""
+
+    __tablename__ = "courses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    info: Mapped[str] = mapped_column(String(300), default="")  # курс/семестр и т.п.
+    lang: Mapped[str] = mapped_column(String(2), default="ru")
+    status: Mapped[str] = mapped_column(String(12), default="building")  # building|ready
+    published: Mapped[bool] = mapped_column(Boolean, default=True)  # виден студентам
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class CourseTopic(Base):
+    """Тема курса: заголовок + сгенерированная теория + тест (вопросы JSON)."""
+
+    __tablename__ = "course_topics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    title: Mapped[str] = mapped_column(String(400))
+    theory: Mapped[str] = mapped_column(Text, default="")
+    # [{"q": str, "options": [str,...], "correct": int}, ...]
+    questions: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(12), default="pending")  # pending|done|error
+    sources: Mapped[list] = mapped_column(JSON, default=list)  # названия книг, если по библиотеке
+
+
+class CourseProgress(Base):
+    """Прогресс студента по теме курса: прочитана ли теория и лучший результат теста."""
+
+    __tablename__ = "course_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("course_topics.id"), index=True)
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    best_correct: Mapped[int] = mapped_column(Integer, default=0)
+    best_total: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "topic_id", name="uq_course_progress"),)
