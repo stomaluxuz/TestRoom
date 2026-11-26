@@ -59,6 +59,11 @@ const T = {
     code_6: "Код состоит из 6 цифр", no_conn: "Нет связи с сервером. Проверьте интернет.",
     edit_name: "Изменить ФИО", fio: "ФИО", vuz: "Вуз", kafedra: "Кафедра",
     edit_work: "Изменить вуз / кафедру", back_home: "На главную",
+    study_group: "Группа", edit_student: "Изменить вуз / группу", my_vuz_group: "Вуз и группа",
+    group_number: "Номер группы", group_ph: "Например: 101",
+    rating_title: "Рейтинг", rating_visible: "Показывать меня в рейтинге",
+    rating_hint: "Когда включено — другие видят ваше имя и место. Выключите, чтобы остаться анонимно: своё место видите только вы, баллы считаются всегда.",
+    choose_vuz_student: "Выберите вуз и укажите номер группы для рейтинга.", save_vuz_group: "Сохранить",
     support: "🆘 Поддержка", support_hint: "Опишите проблему или вопрос — мы ответим в чате бота.",
     support_ph: "Ваше сообщение…", support_send: "Отправить", support_sent: "Отправлено ✅ Мы ответим в боте.",
     support_empty: "Напишите сообщение.",
@@ -170,6 +175,11 @@ const T = {
     code_6: "Kod 6 raqamdan iborat", no_conn: "Server bilan aloqa yo'q. Internetni tekshiring.",
     edit_name: "F.I.Sh. o'zgartirish", fio: "F.I.Sh.", vuz: "OTM", kafedra: "Kafedra",
     edit_work: "OTM / kafedrani o'zgartirish", back_home: "Bosh sahifaga",
+    study_group: "Guruh", edit_student: "OTM / guruhni o'zgartirish", my_vuz_group: "OTM va guruh",
+    group_number: "Guruh raqami", group_ph: "Masalan: 101",
+    rating_title: "Reyting", rating_visible: "Reytingda ko'rsatilsin",
+    rating_hint: "Yoqilganda — boshqalar ismingiz va o'rningizni ko'radi. O'chirsangiz anonim qolasiz: o'rningizni faqat o'zingiz ko'rasiz, ballar baribir hisoblanadi.",
+    choose_vuz_student: "Reyting uchun OTMni tanlang va guruh raqamini kiriting.", save_vuz_group: "Saqlash",
     support: "🆘 Yordam", support_hint: "Muammo yoki savolni yozing — bot chatida javob beramiz.",
     support_ph: "Xabaringiz…", support_send: "Yuborish", support_sent: "Yuborildi ✅ Botda javob beramiz.",
     support_empty: "Xabar yozing.",
@@ -281,6 +291,11 @@ const T = {
     code_6: "The code is 6 digits", no_conn: "No connection to the server. Check your internet.",
     edit_name: "Edit name", fio: "Full name", vuz: "University", kafedra: "Department",
     edit_work: "Edit university / department", back_home: "Home",
+    study_group: "Group", edit_student: "Edit university / group", my_vuz_group: "University and group",
+    group_number: "Group number", group_ph: "E.g. 101",
+    rating_title: "Rating", rating_visible: "Show me in the rating",
+    rating_hint: "When on, others see your name and rank. Turn it off to stay anonymous: only you see your rank, and points are counted either way.",
+    choose_vuz_student: "Choose your university and enter your group number for the rating.", save_vuz_group: "Save",
     support: "🆘 Support", support_hint: "Describe your problem or question — we'll reply in the bot chat.",
     support_ph: "Your message…", support_send: "Send", support_sent: "Sent ✅ We'll reply in the bot.",
     support_empty: "Write a message.",
@@ -671,11 +686,69 @@ async function profileScreen() {
       <div class="kv"><span>${t("vuz")}</span><span>${esc(ME.teacher_info || "—")}</span></div>
       <div class="kv"><span>${t("kafedra")}</span><span>${esc(ME.teacher_kafedra || "—")}</span></div>
       <button class="btn secondary" id="editwork">${t("edit_work")}</button>
-    </div>` : ""}
+    </div>` : `
+    <div class="card">
+      <div class="kv"><span>${t("vuz")}</span><span class="ell">${esc(ME.university || "—")}</span></div>
+      <div class="kv"><span>${t("study_group")}</span><span>${esc(ME.study_group || "—")}</span></div>
+      <button class="btn secondary" id="editstud">${t("edit_student")}</button>
+    </div>
+    <div class="card">
+      <div class="row"><b>🏆 ${t("rating_title")}</b>
+        <label class="switch"><input type="checkbox" id="rtg" ${ME.rating_public ? "checked" : ""}><span class="slider"></span></label>
+      </div>
+      <p class="muted small" style="margin:8px 0 0">${t("rating_hint")}</p>
+    </div>`}
   `);
   showTabs("profile");
   on("#editname", "click", () => go(nameScreen));
   on("#editwork", "click", () => go(universityPickerScreen, { edit: true }));
+  on("#editstud", "click", () => go(studentProfileScreen));
+  const rtg = document.getElementById("rtg");
+  if (rtg) rtg.addEventListener("change", async () => {
+    try { await api("/api/me/rating", { json: { public: rtg.checked } }); ME.rating_public = rtg.checked; haptic("success"); }
+    catch (e) { rtg.checked = !rtg.checked; toast(e.message); }
+  });
+}
+
+// Студент указывает вуз (поиск по списку) и номер группы — область для рейтинга.
+async function studentProfileScreen() {
+  let unis = [];
+  try { unis = await api("/api/universities"); } catch (e) {}
+  let chosen = ME.university || "";
+  render(`
+    ${langBar()}
+    <h1>${t("my_vuz_group")}</h1>
+    <p class="muted">${t("choose_vuz_student")}</p>
+    <div class="card">
+      <label>${t("vuz")}</label>
+      <input class="search" id="usearch" placeholder="${t("search_vuz")}" autocomplete="off" value="${esc(chosen)}">
+      <div id="ulist"></div>
+      <label>${t("group_number")}</label>
+      <input id="grp" placeholder="${t("group_ph")}" maxlength="100" value="${esc(ME.study_group || "")}">
+      <button class="btn" id="save">${t("save_vuz_group")}</button>
+    </div>
+  `);
+  const search = document.getElementById("usearch");
+  function drawList(q) {
+    const ql = (q || "").trim().toLowerCase();
+    const el = document.getElementById("ulist");
+    if (!el) return;
+    if (!ql) { el.innerHTML = ""; return; }
+    const found = unis.filter(u => u.toLowerCase().includes(ql)).slice(0, 20);
+    el.innerHTML = found.length
+      ? found.map(u => `<div class="item uni" data-u="${esc(u)}"><div class="grow">${esc(u)}</div></div>`).join("")
+      : `<p class="muted small">${t("vuz_not_found")}</p>`;
+    onAll(".uni", "click", el2 => { chosen = el2.dataset.u; search.value = chosen; el.innerHTML = ""; });
+  }
+  search.addEventListener("input", e => { chosen = e.target.value; drawList(e.target.value); });
+  on("#save", "click", async () => {
+    const university = (search.value || "").trim();
+    const study_group = document.getElementById("grp").value.trim();
+    try {
+      await api("/api/me/student-profile", { json: { university, study_group } });
+      ME = await api("/api/me"); haptic("success"); toast(t("saved")); back();
+    } catch (e) { toast(e.message); }
+  });
 }
 
 async function supportScreen() {

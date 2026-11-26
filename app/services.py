@@ -83,6 +83,21 @@ async def set_full_name(db: AsyncSession, user: User, name: str) -> User:
     return user
 
 
+async def set_student_profile(db: AsyncSession, user: User, university: str, study_group: str) -> User:
+    """Студент указывает вуз и номер группы — область для рейтинга."""
+    user.university = (" ".join((university or "").split())[:500]) or None
+    user.study_group = (" ".join((study_group or "").split())[:100]) or None
+    await db.commit()
+    return user
+
+
+async def set_rating_public(db: AsyncSession, user: User, public: bool) -> User:
+    """Видимость студента в рейтинге (имя показывается/скрывается). Баллы считаются всегда."""
+    user.rating_public = bool(public)
+    await db.commit()
+    return user
+
+
 async def set_teacher_info(db: AsyncSession, user: User, info: str, kafedra: str | None = None) -> User:
     """Преподаватель сам меняет своё место работы (вуз) и кафедру."""
     if not user.is_teacher:

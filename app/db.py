@@ -84,6 +84,12 @@ def _migrate(conn):
         conn.execute(text("ALTER TABLE users ADD COLUMN proplus_until DATETIME"))
     if "lang" not in cols:
         conn.execute(text("ALTER TABLE users ADD COLUMN lang VARCHAR(2) NOT NULL DEFAULT 'ru'"))
+    if "university" not in cols:
+        conn.execute(text("ALTER TABLE users ADD COLUMN university TEXT"))
+    if "study_group" not in cols:
+        conn.execute(text("ALTER TABLE users ADD COLUMN study_group VARCHAR(100)"))
+    if "rating_public" not in cols:
+        conn.execute(text("ALTER TABLE users ADD COLUMN rating_public BOOLEAN NOT NULL DEFAULT 1"))
     if insp.has_table("library_docs"):
         dcols = {c["name"] for c in insp.get_columns("library_docs")}
         if "figures_status" not in dcols:

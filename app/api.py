@@ -294,6 +294,15 @@ class WorkplaceIn(BaseModel):
     kafedra: str = ""
 
 
+class StudentProfileIn(BaseModel):
+    university: str = ""
+    study_group: str = ""
+
+
+class RatingVisibilityIn(BaseModel):
+    public: bool = True
+
+
 class SoloIn(BaseModel):
     test_id: int
     question_count: int = 0
@@ -520,6 +529,9 @@ def create_app() -> FastAPI:
             "is_pro_plus": user.is_pro_plus,
             "proplus_until": user.proplus_until.isoformat() if user.is_pro_plus else None,
             "lang": getattr(user, "lang", None) or "ru",
+            "university": user.university,
+            "study_group": user.study_group,
+            "rating_public": bool(getattr(user, "rating_public", True)),
         }
         cfg = await svc.get_settings(db)
         data["balance"] = user.balance or 0
@@ -557,6 +569,22 @@ def create_app() -> FastAPI:
     ):
         await svc.set_teacher_info(db, user, body.info, body.kafedra)
         return {"teacher_info": user.teacher_info, "teacher_kafedra": user.teacher_kafedra}
+
+    @app.post("/api/me/student-profile")
+    async def set_student_profile(
+        body: StudentProfileIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+    ):
+        """Вуз и группа студента — область для рейтинга."""
+        await svc.set_student_profile(db, user, body.university, body.study_group)
+        return {"university": user.university, "study_group": user.study_group}
+
+    @app.post("/api/me/rating")
+    async def set_rating_visibility(
+        body: RatingVisibilityIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+    ):
+        """Показывать/скрывать студента в рейтинге (баллы считаются в любом случае)."""
+        await svc.set_rating_public(db, user, body.public)
+        return {"rating_public": user.rating_public}
 
     @app.post("/api/me/teacher-request")
     async def teacher_request(
