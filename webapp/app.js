@@ -93,7 +93,8 @@ const T = {
     choose_vuz_student: "Выберите вуз и укажите номер группы для рейтинга.", save_vuz_group: "Сохранить",
     vuz_not_chosen: "Вуз не выбран", pick_vuz_list: "Выберите вуз из списка.",
     studrating: "Рейтинг", studrating_sub: "Общий и по группам", rating_all: "Общий",
-    how_study: "Рейтинг", no_rating_groups: "Проведите тесты — здесь появится успеваемость студентов.",
+    how_study: "Рейтинг", no_rating_groups: "Пока нет студентов с заполненной группой в вашем вузе.",
+    teacher_need_vuz: "Укажите ваш вуз в профиле — тогда увидите рейтинг студентов вашего вуза.",
     rating_open: "Рейтинг", rating_sub: "Твоё место среди своих",
     rating_group: "Моя группа", rating_uni: "Мой вуз",
     rating_pts: "очк.", rating_tests_n: "тестов", anon: "Аноним",
@@ -222,7 +223,8 @@ const T = {
     choose_vuz_student: "Reyting uchun OTMni tanlang va guruh raqamini kiriting.", save_vuz_group: "Saqlash",
     vuz_not_chosen: "OTM tanlanmagan", pick_vuz_list: "OTMni ro'yxatdan tanlang.",
     studrating: "Reyting", studrating_sub: "Umumiy va guruhlar bo'yicha", rating_all: "Umumiy",
-    how_study: "Reyting", no_rating_groups: "Testlar o'tkazing — bu yerda talabalar o'zlashtirishi paydo bo'ladi.",
+    how_study: "Reyting", no_rating_groups: "Hozircha vuzingizda guruhi to'ldirilgan talabalar yo'q.",
+    teacher_need_vuz: "Profilda vuzingizni ko'rsating — shunda vuzingiz talabalari reytingini ko'rasiz.",
     rating_open: "Reyting", rating_sub: "O'zingiznikilar orasida o'rningiz",
     rating_group: "Mening guruhim", rating_uni: "Mening OTM",
     rating_pts: "ball", rating_tests_n: "test", anon: "Anonim",
@@ -351,7 +353,8 @@ const T = {
     choose_vuz_student: "Choose your university and enter your group number for the rating.", save_vuz_group: "Save",
     vuz_not_chosen: "No university chosen", pick_vuz_list: "Choose a university from the list.",
     studrating: "Rating", studrating_sub: "Overall and by group", rating_all: "Overall",
-    how_study: "Rating", no_rating_groups: "Run some tests — student performance will show up here.",
+    how_study: "Rating", no_rating_groups: "No students with a group set in your university yet.",
+    teacher_need_vuz: "Set your university in the profile to see your university's student rating.",
     rating_open: "Rating", rating_sub: "Your place among peers",
     rating_group: "My group", rating_uni: "My university",
     rating_pts: "pts", rating_tests_n: "tests", anon: "Anonymous",
@@ -1390,8 +1393,14 @@ async function teacherRatingScreen(params = {}) {
   let groups;
   try { groups = await api("/api/teacher/rating/groups"); } catch (e) { return toast(e.message); }
   if (!groups.length) {
-    document.getElementById("rbody").className = "";
-    document.getElementById("rbody").innerHTML = `<div class="card muted" style="text-align:center">${t("no_rating_groups")}</div>`;
+    // различаем «вуз не указан» и «нет студентов»
+    let d = {};
+    try { d = await api("/api/teacher/rating?group="); } catch (e) {}
+    const msg = d.need_vuz ? t("teacher_need_vuz") : t("no_rating_groups");
+    const body = document.getElementById("rbody");
+    body.className = "";
+    body.innerHTML = `<div class="card muted" style="text-align:center">${msg}${d.need_vuz ? `<br><button class="btn secondary" id="goprof" style="margin-top:10px">${t("edit_work")}</button>` : ""}</div>`;
+    on("#goprof", "click", () => goTab(profileScreen));
     return;
   }
   const cur = (params.group && groups.includes(params.group)) ? params.group : "";  // "" — общий рейтинг
@@ -1415,13 +1424,13 @@ async function teacherRatingScreen(params = {}) {
     const tw = n => LANG === "ru"
       ? (n % 10 === 1 && n % 100 !== 11 ? "тест" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "теста" : "тестов"))
       : LANG === "en" ? (n === 1 ? "test" : "tests") : "test";
-    const avgClass = a => a >= 80 ? "ok" : a >= 50 ? "mid" : "low";
+    const showGroup = !data.group;  // в «Общем» показываем группу студента
     body.innerHTML = `<div class="rlist">${data.rows.map(r => `
       <div class="rrow">
         <div class="rmed">${medal(r.rank)}</div>
         <div class="grow"><div class="ell">${esc(r.name)}</div>
-          <div class="muted small">${r.tests} ${tw(r.tests)} · ${r.points} ${t("rating_pts")}</div></div>
-        <div class="ravg ${avgClass(r.avg)}">${r.avg}%</div>
+          <div class="muted small">${showGroup && r.group ? esc(r.group) + " · " : ""}${r.tests} ${tw(r.tests)}${r.tests ? ` · ${r.avg}%` : ""}</div></div>
+        <div class="rpts">${r.points} <span>${t("rating_pts")}</span></div>
       </div>`).join("")}</div>`;
   }
 }

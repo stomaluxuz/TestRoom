@@ -117,36 +117,9 @@ async def test_unavailable_without_profile():
         assert board["available"] is False and board["need"] == "group"
 
 
-async def test_teacher_group_rating_ranks_by_percent():
-    async with dbmod.SessionLocal() as db:
-        teacher = await svc.get_or_create_user(db, 1)  # admin = teacher
-        s1 = await _student(db, 200, "Алиса", "ТГСИ", "101", False)  # скрыта в студ. рейтинге
-        s2 = await _student(db, 201, "Борис", "ТГСИ", "101", True)
-        sess = await _session(db, teacher.id)  # группа 101, 2 вопроса в попытке
-        await _attempt(db, sess.id, s1.id, "Алиса", 2)  # 2/2 = 100%
-        await _attempt(db, sess.id, s2.id, "Борис", 1)  # 1/2 = 50%
-        await db.commit()
-
-        assert await svc.teacher_rating_groups(db, teacher) == ["101"]
-        rows = (await svc.teacher_group_rating(db, teacher, "101"))["rows"]
-        assert [r["name"] for r in rows] == ["Алиса", "Борис"]  # по среднему %: 100 > 50
-        assert rows[0]["avg"] == 100 and rows[0]["rank"] == 1
-        assert rows[1]["avg"] == 50
-        # преподаватель видит настоящее имя скрытого студента (не «Аноним»)
-        assert "Аноним" not in [r["name"] for r in rows]
-
-
-async def test_teacher_sees_only_own_sessions():
-    async with dbmod.SessionLocal() as db:
-        teacher = await svc.get_or_create_user(db, 1)
-        other = await svc.get_or_create_user(db, 2)  # другой преподаватель
-        s1 = await _student(db, 210, "Алиса", "ТГСИ", "101", True)
-        sess_other = await _session(db, other.id)  # сессию провёл ДРУГОЙ препод
-        await _attempt(db, sess_other.id, s1.id, "Алиса", 2)
-        await db.commit()
-        # наш преподаватель тестов не проводил → ни групп, ни строк
-        assert await svc.teacher_rating_groups(db, teacher) == []
-        assert (await svc.teacher_group_rating(db, teacher, "101"))["rows"] == []
+async def _set_teacher_vuz(db, teacher, uni):
+    teacher.teacher_info = uni
+    await db.commit()
 
 
 async def _session_g(db, teacher_id, group):
@@ -158,22 +131,70 @@ async def _session_g(db, teacher_id, group):
     return s
 
 
-async def test_teacher_overall_rating_across_groups():
+async def test_teacher_group_rating_ranks_by_points():
+    async with dbmod.SessionLocal() as db:
+        teacher = await svc.get_or_create_user(db, 1)  # admin = teacher
+        await _set_teacher_vuz(db, teacher, "ТГСИ")
+        s1 = await _student(db, 200, "Алиса", "ТГСИ", "101", False)  # скрыта в студ. рейтинге
+        s2 = await _student(db, 201, "Борис", "ТГСИ", "101", True)
+        sess = await _session(db, teacher.id)  # группа 101, 2 вопроса в попытке
+        await _attempt(db, sess.id, s1.id, "Алиса", 2)  # 2 очка, 100%
+        await _attempt(db, sess.id, s2.id, "Борис", 1)  # 1 очко, 50%
+        await db.commit()
+
+        assert await svc.teacher_rating_groups(db, teacher) == ["101"]
+        rows = (await svc.teacher_group_rating(db, teacher, "101"))["rows"]
+        assert [r["name"] for r in rows] == ["Алиса", "Борис"]  # по очкам: 2 > 1
+        assert rows[0]["points"] == 2 and rows[0]["avg"] == 100 and rows[0]["rank"] == 1
+        assert rows[1]["points"] == 1 and rows[1]["avg"] == 50
+        # преподаватель видит настоящее имя скрытого студента (не «Аноним»)
+        assert "Аноним" not in [r["name"] for r in rows]
+
+
+async def test_teacher_sees_all_vuz_students_even_if_not_tested_by_him():
     async with dbmod.SessionLocal() as db:
         teacher = await svc.get_or_create_user(db, 1)
+        await _set_teacher_vuz(db, teacher, "ТГСИ")
+        other = await svc.get_or_create_user(db, 2)  # другой преподаватель
+        s1 = await _student(db, 210, "Алиса", "ТГСИ", "101", True)
+        sess_other = await _session(db, other.id)  # тест провёл ДРУГОЙ преподаватель
+        await _attempt(db, sess_other.id, s1.id, "Алиса", 2)
+        await db.commit()
+        # наш преподаватель тестов не проводил, но видит студента своего вуза и его очки
+        assert await svc.teacher_rating_groups(db, teacher) == ["101"]
+        rows = (await svc.teacher_group_rating(db, teacher, "101"))["rows"]
+        assert [r["name"] for r in rows] == ["Алиса"]
+        assert rows[0]["points"] == 2
+
+
+async def test_teacher_needs_vuz_in_profile():
+    async with dbmod.SessionLocal() as db:
+        teacher = await svc.get_or_create_user(db, 1)  # teacher_info не задан
+        await _student(db, 220, "Алиса", "ТГСИ", "101", True)
+        assert await svc.teacher_rating_groups(db, teacher) == []
+        data = await svc.teacher_group_rating(db, teacher, "")
+        assert data["need_vuz"] is True and data["rows"] == []
+
+
+async def test_teacher_overall_only_own_vuz_and_active():
+    async with dbmod.SessionLocal() as db:
+        teacher = await svc.get_or_create_user(db, 1)
+        await _set_teacher_vuz(db, teacher, "ТГСИ")
         a = await _student(db, 300, "Алиса", "ТГСИ", "101", True)
         b = await _student(db, 301, "Борис", "ТГСИ", "202", True)
+        await _student(db, 302, "Инертный", "ТГСИ", "101", True)   # без тестов — в «Общий» не входит
+        other_vuz = await _student(db, 303, "Чужой", "ТМА", "101", True)  # другой вуз — не входит
         s101 = await _session_g(db, teacher.id, "101")
         s202 = await _session_g(db, teacher.id, "202")
-        await _attempt(db, s101.id, a.id, "Алиса", 2)   # 100% в группе 101
-        await _attempt(db, s202.id, b.id, "Борис", 1)   # 50% в группе 202
+        await _attempt(db, s101.id, a.id, "Алиса", 2)
+        await _attempt(db, s202.id, b.id, "Борис", 1)
+        await _attempt(db, s101.id, other_vuz.id, "Чужой", 2)
         await db.commit()
 
         assert set(await svc.teacher_rating_groups(db, teacher)) == {"101", "202"}
-        # общий (group="") — обе группы вместе
         overall = (await svc.teacher_group_rating(db, teacher, ""))["rows"]
-        assert {r["name"] for r in overall} == {"Алиса", "Борис"}
-        assert overall[0]["name"] == "Алиса" and overall[0]["avg"] == 100
-        # по группе 202 — только Борис
-        g202 = (await svc.teacher_group_rating(db, teacher, "202"))["rows"]
-        assert [r["name"] for r in g202] == ["Борис"]
+        assert {r["name"] for r in overall} == {"Алиса", "Борис"}  # активные своего вуза
+        assert overall[0]["name"] == "Алиса" and overall[0]["points"] == 2
+        # по группе 101 — и неактивный студент виден (полный состав), чужой вуз — нет
+        g101 = [r["name"] for r in (await svc.teacher_group_rating(db, teacher, "101"))["rows"]]
+        assert "Инертный" in g101 and "Чужой" not in g101

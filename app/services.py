@@ -1381,58 +1381,73 @@ async def rating_board(db: AsyncSession, user: User, scope: str = "group", limit
             "top": top, "me": my_row, "rating_public": bool(user.rating_public)}
 
 
+async def _perf_by_user(db: AsyncSession, user_ids: list[int]) -> dict[int, tuple[int, int, int]]:
+    """Как _points_by_user, но ещё и всего вопросов — для среднего процента.
+    Первая зачётная попытка по каждому тесту (любого преподавателя). {uid: (верно, всего, тестов)}."""
+    if not user_ids:
+        return {}
+    rows = (await db.execute(
+        select(Attempt.user_id, TestSession.test_id, Attempt.correct_count,
+               Attempt.question_order, Attempt.started_at)
+        .join(TestSession, TestSession.id == Attempt.session_id)
+        .where(Attempt.user_id.in_(user_ids),
+               TestSession.solo.is_(False), Attempt.finished_at.is_not(None))
+        .order_by(Attempt.started_at.asc())
+    )).all()
+    first: dict[tuple[int, int], tuple[int, int]] = {}
+    for uid, test_id, correct, qorder, _started in rows:
+        key = (uid, test_id)
+        if key not in first:
+            first[key] = (correct or 0, len(qorder or []))
+    agg: dict[int, list[int]] = {}
+    for (uid, _t), (c, tot) in first.items():
+        a = agg.setdefault(uid, [0, 0, 0])
+        a[0] += c
+        a[1] += tot
+        a[2] += 1
+    return {uid: (c, tot, n) for uid, (c, tot, n) in agg.items()}
+
+
 async def teacher_rating_groups(db: AsyncSession, teacher: User) -> list[str]:
-    """Группы, по которым преподаватель проводил тесты (для выбора в рейтинге)."""
+    """Группы студентов ВУЗА преподавателя (для выбора в рейтинге) — независимо от того,
+    кто проводил тесты. Вуз преподавателя берётся из его профиля (teacher_info)."""
     require_teacher(teacher)
+    uni = (teacher.teacher_info or "").strip()
+    if not uni:
+        return []
     rows = await db.scalars(
-        select(TestSession.group_name).where(
-            TestSession.teacher_id == teacher.id, TestSession.solo.is_(False)).distinct())
+        select(User.study_group).where(
+            User.role == "student", User.university == uni,
+            User.study_group.is_not(None)).distinct())
     groups = {(g or "").strip() for g in rows if (g or "").strip()}
     return sorted(groups, key=lambda s: s.casefold())
 
 
 async def teacher_group_rating(db: AsyncSession, teacher: User, group: str = "") -> dict:
-    """Успеваемость студентов по тестам этого преподавателя. Пустая group — ОБЩИЙ рейтинг
-    (все группы вместе); иначе — только выбранная группа.
-    Настоящие имена (переключатель приватности студента на преподавателя не влияет),
-    первая зачётная попытка по каждому тесту, сортировка по среднему проценту."""
+    """Рейтинг СТУДЕНТОВ вуза преподавателя: все студенты, а не только те, кого он тестировал.
+    Пустая group — весь вуз (общий); иначе — выбранная группа. Очки — по всем реальным тестам
+    (любого преподавателя), первая попытка. Преподаватель видит настоящие имена."""
     require_teacher(teacher)
+    uni = (teacher.teacher_info or "").strip()
+    if not uni:
+        return {"group": group, "rows": [], "need_vuz": True}
     group = (group or "").strip()
-    q = (
-        select(Attempt.user_id, TestSession.test_id, Attempt.correct_count,
-               Attempt.question_order, Attempt.full_name, Attempt.started_at)
-        .join(TestSession, TestSession.id == Attempt.session_id)
-        .where(TestSession.teacher_id == teacher.id,
-               TestSession.solo.is_(False), Attempt.finished_at.is_not(None))
-        .order_by(Attempt.started_at.asc())
-    )
-    if group:  # конкретная группа; пусто — общий рейтинг по всем группам
-        q = q.where(TestSession.group_name == group)
-    rows = (await db.execute(q)).all()
-    first: dict[tuple[int, int], tuple[int, int, str]] = {}  # (user,test) -> (верно, всего, имя)
-    for uid, test_id, correct, qorder, name, _started in rows:
-        key = (uid, test_id)
-        if key not in first:
-            first[key] = (correct or 0, len(qorder or []), name)
-    agg: dict[int, dict] = {}
-    for (uid, _t), (correct, total, name) in first.items():
-        a = agg.setdefault(uid, {"correct": 0, "total": 0, "tests": 0, "name": name})
-        a["correct"] += correct
-        a["total"] += total
-        a["tests"] += 1
-    ids = list(agg.keys())
-    users = {u.id: u for u in await db.scalars(select(User).where(User.id.in_(ids)))} if ids else {}
+    q = select(User).where(User.role == "student", User.university == uni)
+    if group:
+        q = q.where(User.study_group == group)
+    users = list(await db.scalars(q))
+    perf = await _perf_by_user(db, [u.id for u in users])
+    # по группе — весь список (виден и тот, кто ничего не сдавал); общий — только активные
+    if not group:
+        users = [u for u in users if perf.get(u.id, (0, 0, 0))[2] > 0]
+    users.sort(key=lambda u: (-(perf.get(u.id, (0, 0, 0))[0]), (u.full_name or "").casefold()))
     out = []
-    for uid, a in agg.items():
-        u = users.get(uid)
-        name = (u.full_name if (u and u.full_name) else a["name"]) or "—"
-        avg = round(100 * a["correct"] / a["total"]) if a["total"] else 0
-        out.append({"user_id": uid, "name": name, "avg": avg,
-                    "points": a["correct"], "tests": a["tests"]})
-    out.sort(key=lambda r: (-r["avg"], -r["tests"], r["name"].casefold()))
-    for i, r in enumerate(out):
-        r["rank"] = i + 1
-    return {"group": group, "rows": out}
+    for i, u in enumerate(users):
+        c, tot, n = perf.get(u.id, (0, 0, 0))
+        out.append({"rank": i + 1, "user_id": u.id, "name": u.full_name or "—",
+                    "points": c, "tests": n, "avg": round(100 * c / tot) if tot else 0,
+                    "group": u.study_group or ""})
+    return {"group": group, "rows": out, "need_vuz": False}
 
 
 # ---------------------------------------------------------------- учитель: статистика
