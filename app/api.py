@@ -402,10 +402,6 @@ class LibrarySubjectIn(BaseModel):
     name: str
 
 
-class ReorderIn(BaseModel):
-    ids: list[int] = []
-
-
 class LibraryDecideIn(BaseModel):
     approve: bool
 
@@ -1320,11 +1316,6 @@ def create_app() -> FastAPI:
     @app.delete("/api/admin/library/subjects/{subject_id}")
     async def a_lib_subj_delete(subject_id: int, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
         await svc.delete_library_subject(db, subject_id)
-        return {"ok": True}
-
-    @app.post("/api/admin/library/subjects/reorder")
-    async def a_lib_subj_reorder(body: ReorderIn, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
-        await svc.reorder_library_subjects(db, body.ids)
         return {"ok": True}
 
     @app.post("/api/admin/library/bulk_upload")

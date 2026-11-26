@@ -887,10 +887,10 @@ async def test_admin_daily_stats_bad_metric(db):
         await svc.admin_daily_stats(db, "nope")
 
 
-async def test_reorder_library_subjects(db):
-    a = await svc.add_library_subject(db, "Предмет А")
-    b = await svc.add_library_subject(db, "Предмет Б")
-    c = await svc.add_library_subject(db, "Предмет В")
-    await svc.reorder_library_subjects(db, [c.id, a.id, b.id])  # хотим В, А, Б
+async def test_library_subjects_sorted_alphabetically(db):
+    await svc.add_library_subject(db, "Яблоко")
+    await svc.add_library_subject(db, "Арбуз")
+    await svc.add_library_subject(db, "берёза")
     names = [s["name"] for s in await svc.list_library_subjects(db)]
-    assert names[:3] == ["Предмет В", "Предмет А", "Предмет Б"]
+    assert names == sorted(names, key=str.casefold)  # строго по алфавиту
+    assert names.index("Арбуз") < names.index("берёза") < names.index("Яблоко")
