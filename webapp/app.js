@@ -69,6 +69,9 @@ const T = {
     sub_history: "История", sub_apply: "Отправить заявку", sub_open_tests: "Открытые тесты", sub_upload: "Свой файл",
     mistakes_title: "Мои ошибки", sub_mistakes: "Разбор", your_answer: "Твой ответ", correct_answer: "Правильно",
     no_mistakes: "Ошибок нет — отлично! 🎉",
+    courses_title: "Учебный путь", sub_courses: "Теория + тесты", theory_read: "✓ Прочитано", mark_read: "Отметить прочитанным",
+    take_test: "Пройти тест", no_courses: "Пока нет курсов.", course_building: "Курс ещё собирается…",
+    sources_from: "По материалам", topic_test_done: "Результат", next_q: "Дальше", finish_test: "Завершить",
     teacher: "Преподаватель", plan_free: "Бесплатный тариф", plan_pro: "Pro до",
     test_running: "Идёт тест", code: "код", time_left: "осталось",
     my_tests: "Мои тесты", upload_test: "Загрузить тест", history: "История запусков",
@@ -172,6 +175,9 @@ const T = {
     sub_history: "Tarix", sub_apply: "Ariza yuborish", sub_open_tests: "Ochiq testlar", sub_upload: "O'z fayling",
     mistakes_title: "Mening xatolarim", sub_mistakes: "Tahlil", your_answer: "Sizning javobingiz", correct_answer: "To'g'ri",
     no_mistakes: "Xatolar yo'q — zo'r! 🎉",
+    courses_title: "O'quv yo'li", sub_courses: "Nazariya + testlar", theory_read: "✓ O'qildi", mark_read: "O'qildi deb belgilash",
+    take_test: "Testni yechish", no_courses: "Hozircha kurslar yo'q.", course_building: "Kurs hali yig'ilmoqda…",
+    sources_from: "Manbalar", topic_test_done: "Natija", next_q: "Keyingi", finish_test: "Yakunlash",
     teacher: "O'qituvchi", plan_free: "Bepul tarif", plan_pro: "Pro:",
     test_running: "Test ketmoqda", code: "kod", time_left: "qoldi",
     my_tests: "Mening testlarim", upload_test: "Test yuklash", history: "Ishga tushirishlar tarixi",
@@ -275,6 +281,9 @@ const T = {
     sub_history: "History", sub_apply: "Send a request", sub_open_tests: "Open tests", sub_upload: "Your file",
     mistakes_title: "My mistakes", sub_mistakes: "Review", your_answer: "Your answer", correct_answer: "Correct",
     no_mistakes: "No mistakes — great! 🎉",
+    courses_title: "Learning path", sub_courses: "Theory + tests", theory_read: "✓ Read", mark_read: "Mark as read",
+    take_test: "Take the test", no_courses: "No courses yet.", course_building: "The course is still building…",
+    sources_from: "Based on", topic_test_done: "Result", next_q: "Next", finish_test: "Finish",
     teacher: "Teacher", plan_free: "Free plan", plan_pro: "Pro until",
     test_running: "Test in progress", code: "code", time_left: "left",
     my_tests: "My tests", upload_test: "Upload test", history: "Launch history",
@@ -1043,6 +1052,7 @@ const ICONS = {
   gamepad: '<rect x="2" y="6" width="20" height="12" rx="5"/><path d="M7 11v3M5.5 12.5h3"/><circle cx="15.5" cy="11.5" r="1.1"/><circle cx="18" cy="14" r="1.1"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-6.5 8-6.5s8 2.3 8 6.5"/>',
   repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V10a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  route: '<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h6a4 4 0 0 0 4-4V9"/><path d="M15 5H9a4 4 0 0 0-4 4v6"/>',
 };
 function svgIcon(name) {
   const p = ICONS[name] || ICONS.book;
@@ -1083,6 +1093,7 @@ async function studentHome() {
     ${payCard}
     <h2>${t("quick_title")}</h2>
     <div class="grid">
+      ${gcardWide("courses", "route", t("courses_title"), t("sub_courses"), "blue")}
       ${gcard("presstudio", "monitor", (PRESF[LANG] || PRESF.ru).title, "ИИ", "blue")}
       ${gcard("mytests", "book", t("my_tests_training"), t("sub_open_tests"), "violet")}
       ${gcard("upload", "upload", t("upload_my_test"), t("sub_upload"), "orange")}
@@ -1108,6 +1119,7 @@ async function studentHome() {
   on("#torole", "click", () => go(universityPickerScreen));
   on("#results", "click", () => go(studentResultsScreen));
   on("#mistakes", "click", () => go(mistakesScreen));
+  on("#courses", "click", () => go(coursesScreen));
   on("#topup", "click", () => { toast("Откройте чат бота и нажмите «💳 Пополнить баланс»"); try { tg && tg.close(); } catch (e) {} });
   async function join() {
     if (code.value.length !== 6) { toast(t("code_6")); return; }
@@ -1158,6 +1170,98 @@ async function mistakesScreen() {
     }).join("");
     return `<div class="card"><div style="font-weight:600;margin-bottom:8px">${esc(q.text)}</div>${opts}</div>`;
   }).join("");
+}
+
+// ---- студент: учебный путь (курсы → темы → теория + тест)
+async function coursesScreen() {
+  render(`${langBar()}<h1>🎓 ${t("courses_title")}</h1><div id="cl" class="muted small">${t("loading")}</div>`);
+  let list;
+  try { list = await api("/api/courses"); } catch (e) { return toast(e.message); }
+  const el = document.getElementById("cl"); if (!el) return;
+  el.className = "";
+  el.innerHTML = list.length ? list.map(c => `
+    <div class="item" data-id="${c.id}"><span class="ico">🎓</span>
+      <div class="grow"><div class="ell">${esc(c.title)}</div><div class="muted small">${esc(c.info || "")}${c.info ? " · " : ""}${c.topics} тем</div></div>
+      <span class="muted">›</span></div>`).join("") : `<div class="card muted">${t("no_courses")}</div>`;
+  onAll("#cl .item", "click", e => go(courseScreen, { id: +e.dataset.id }));
+}
+
+async function courseScreen({ id }) {
+  render(`${langBar()}<div id="cv" class="muted small">${t("loading")}</div>`);
+  let d;
+  try { d = await api(`/api/courses/${id}`); } catch (e) { return toast(e.message); }
+  const el = document.getElementById("cv"); if (!el) return;
+  el.className = "";
+  const topics = d.topics.map((tp, i) => {
+    const ready = tp.status === "done";
+    const score = tp.best_total ? ` · ${tp.best_correct}/${tp.best_total}` : "";
+    const badge = !ready ? `<span class="badge warn">…</span>` : (tp.read ? `<span class="badge ok">✓</span>` : "");
+    return `<div class="item" data-tid="${tp.id}" data-ok="${ready ? 1 : 0}">
+      <span class="ico" style="font-weight:700;color:var(--brand)">${i + 1}</span>
+      <div class="grow"><div class="ell">${esc(tp.title)}</div>
+        <div class="muted small">${ready ? (t("sub_courses") + score) : t("course_building")}</div></div>
+      ${badge}<span class="muted">›</span></div>`;
+  }).join("");
+  el.innerHTML = `<h1 class="ell">${esc(d.title)}</h1>${d.info ? `<p class="muted small" style="margin:-6px 0 10px">${esc(d.info)}</p>` : ""}${topics}`;
+  onAll("#cv .item", "click", e => { if (e.dataset.ok === "1") go(topicScreen, { id: +e.dataset.tid }); else toast(t("course_building")); });
+}
+
+function _theoryHtml(s) {
+  const body = esc(s || "").replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>");
+  return `<p>${body}</p>`;
+}
+
+async function topicScreen({ id }) {
+  render(`${langBar()}<div class="center muted">${t("loading")}</div>`);
+  let d;
+  try { d = await api(`/api/courses/topics/${id}`); } catch (e) { return toast(e.message); }
+  drawTheory();
+  function drawTheory() {
+    $app.innerHTML = `${langBar()}
+      <h1 class="ell">${esc(d.title)}</h1>
+      ${d.sources && d.sources.length ? `<p class="muted small" style="margin:-6px 0 8px">📚 ${t("sources_from")}: ${d.sources.map(esc).join("; ")}</p>` : ""}
+      <div class="card theory">${_theoryHtml(d.theory)}</div>
+      <button class="btn secondary" id="read" ${d.read ? "disabled" : ""}>${d.read ? t("theory_read") : t("mark_read")}</button>
+      ${d.questions && d.questions.length ? `<button class="btn" id="test">${t("take_test")}${d.best_total ? ` · ${d.best_correct}/${d.best_total}` : ""}</button>` : ""}`;
+    bindLang();
+    on("#read", "click", async () => {
+      try { await api(`/api/courses/topics/${id}/read`, { method: "POST" }); d.read = true; haptic("success"); drawTheory(); }
+      catch (e) { toast(e.message); }
+    });
+    on("#test", "click", startTest);
+  }
+  function startTest() {
+    const qs = d.questions; let i = 0, correct = 0;
+    drawQ();
+    function drawQ() {
+      const q = qs[i];
+      $app.innerHTML = `<p class="muted small">${i + 1} / ${qs.length}</p>
+        <div class="qbody">${esc(q.q)}</div>
+        <div class="qopts2" id="opts">${q.options.map((o, oi) => `<button class="opt2" data-i="${oi}">${esc(o)}</button>`).join("")}</div>`;
+      onAll("#opts .opt2", "click", el => {
+        const pick = +el.dataset.i, ok = pick === q.correct;
+        if (ok) correct++;
+        $app.querySelectorAll(".opt2").forEach((b, bi) => {
+          b.disabled = true;
+          if (bi === q.correct) b.classList.add("ok"); else if (bi === pick) b.classList.add("bad");
+        });
+        haptic(ok ? "success" : "error");
+        const nxt = document.createElement("button");
+        nxt.className = "btn"; nxt.style.marginTop = "12px";
+        nxt.textContent = i < qs.length - 1 ? t("next_q") : t("finish_test");
+        nxt.onclick = () => { i++; (i < qs.length) ? drawQ() : finishTest(); };
+        $app.appendChild(nxt);
+      });
+    }
+    async function finishTest() {
+      try { await api(`/api/courses/topics/${id}/test`, { json: { correct, total: qs.length } }); } catch (e) {}
+      d.best_correct = correct; d.best_total = qs.length;
+      $app.innerHTML = `<div class="verdict ${correct / qs.length >= 0.6 ? "ok" : "bad"}">${t("topic_test_done")}: ${correct} / ${qs.length}</div>
+        <button class="btn" id="again">${t("take_test")}</button><button class="btn secondary" id="back">${t("back_home")}</button>`;
+      on("#again", "click", startTest);
+      on("#back", "click", drawTheory);
+    }
+  }
 }
 
 function attemptScreen({ state }) {
@@ -1844,6 +1948,7 @@ async function adminScreen(params = {}) {
     <div class="tabs"><button class="${tab === "teachers" ? "on" : ""}" id="t1">Преподаватели</button>
       <button class="${tab === "pay" ? "on" : ""}" id="t3">💰 Оплата</button>
       <button class="${tab === "lib" ? "on" : ""}" id="t5">📚 Библиотека</button>
+      <button class="${tab === "courses" ? "on" : ""}" id="t6">🎓 Курсы</button>
       <button class="${tab === "cast" ? "on" : ""}" id="t4">📢 Рассылка</button>
       <button class="${tab === "log" ? "on" : ""}" id="t2">Журнал</button></div>
     <div id="body"></div>
@@ -1853,6 +1958,7 @@ async function adminScreen(params = {}) {
   on("#t3", "click", () => go(adminScreen, { tab: "pay" }, true));
   on("#t4", "click", () => go(adminScreen, { tab: "cast" }, true));
   on("#t5", "click", () => go(adminScreen, { tab: "lib" }, true));
+  on("#t6", "click", () => go(adminScreen, { tab: "courses" }, true));
   on("#m-users", "click", () => go(adminMetricScreen, { metric: "users" }));
   on("#m-tests", "click", () => go(adminMetricScreen, { metric: "tests" }));
   on("#m-pres", "click", () => go(adminMetricScreen, { metric: "presentations" }));
@@ -1861,6 +1967,7 @@ async function adminScreen(params = {}) {
   const body = document.getElementById("body");
   if (tab === "pay") { await paymentsTab(body); return; }
   if (tab === "lib") { await libraryTab(body); return; }
+  if (tab === "courses") { await coursesTab(body); return; }
   if (tab === "cast") { broadcastTab(body); return; }
   if (tab === "log") {
     const log = await api("/api/admin/log");
@@ -2147,6 +2254,77 @@ async function libraryTab(body) {
   });
   renderPending(pending);
   renderSubs(subjects);
+}
+
+// ---- админ: курсы из силлабуса
+async function coursesTab(body) {
+  body.innerHTML = `<div class="muted">Загрузка…</div>`;
+  let courses;
+  try { courses = await api("/api/admin/courses"); } catch (e) { return toast(e.message); }
+  let lang = "ru";
+  body.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">🎓 Создать курс из силлабуса</h2>
+      <p class="muted small" style="margin:0 0 8px">Загрузите силлабус (.pdf / .docx / .txt) — ИИ вытащит список тем, вы подтвердите, дальше он сам напишет теорию и тесты по каждой теме.</p>
+      <input id="syl" type="file" accept=".pdf,.docx,.txt">
+      <div class="langpick" id="clang" style="margin-top:8px">
+        ${["ru", "uz", "en"].map(l => `<button class="lbtn ${l === "ru" ? "on" : ""}" data-l="${l}">${l === "ru" ? "🇷🇺 Рус" : l === "uz" ? "🇺🇿 Ўзб" : "🇬🇧 Eng"}</button>`).join("")}
+      </div>
+      <button class="btn" id="parse" style="margin-top:8px">🔍 Разобрать силлабус</button>
+      <div id="draft"></div>
+    </div>
+    <h2>Курсы (${courses.length})</h2>
+    <div id="clist"></div>
+  `;
+  onAll("#clang .lbtn", "click", el => { lang = el.dataset.l; $app.querySelectorAll("#clang .lbtn").forEach(b => b.classList.toggle("on", b === el)); });
+  function renderList(list) {
+    const el = document.getElementById("clist");
+    el.innerHTML = list.length ? list.map(c => `
+      <div class="card small"><div class="row"><b>${esc(c.title)}</b>
+        <span class="badge ${c.status === "ready" ? "ok" : "warn"}">${c.status === "ready" ? "готов" : "сборка"} ${c.ready}/${c.topics}</span></div>
+        <div class="muted small">${esc(c.info || "")}</div>
+        <button class="link danger" data-del="${c.id}" style="margin-top:4px">🗑 Удалить</button>
+      </div>`).join("") : `<div class="card muted">Пока нет курсов.</div>`;
+    onAll("[data-del]", "click", async e => {
+      if (!confirm("Удалить курс со всеми темами?")) return;
+      try { await api(`/api/admin/courses/${e.dataset.del}`, { method: "DELETE" }); toast("Удалено"); coursesTab(body); }
+      catch (err) { toast(err.message); }
+    });
+  }
+  on("#parse", "click", async () => {
+    const f = document.getElementById("syl").files[0];
+    if (!f) return toast("Выберите файл силлабуса");
+    const btn = document.getElementById("parse"); btn.disabled = true; btn.textContent = "Разбираю…";
+    try {
+      const fd = new FormData(); fd.append("file", f); fd.append("lang", lang);
+      showDraft(await api("/api/admin/course/parse", { body: fd, method: "POST" }));
+    } catch (e) { toast(e.message); }
+    btn.disabled = false; btn.textContent = "🔍 Разобрать силлабус";
+  });
+  function showDraft(d) {
+    const el = document.getElementById("draft");
+    el.innerHTML = `
+      <hr style="border:none;border-top:1px solid var(--bg2);margin:12px 0">
+      <label>Название предмета</label><input id="ctitle" value="${esc(d.title || "")}">
+      <label>Курс / семестр</label><input id="cinfo" value="${esc(d.info || "")}">
+      <label>Темы (по одной в строке) — ${(d.topics || []).length}</label>
+      <textarea id="ctopics" rows="10">${(d.topics || []).map(esc).join("\n")}</textarea>
+      <button class="btn" id="create" style="margin-top:8px">🚀 Создать курс</button>
+      <p class="muted small" style="margin-top:4px">ИИ соберёт теорию и тесты в фоне — отчёт придёт в бот.</p>`;
+    on("#create", "click", async () => {
+      const title = document.getElementById("ctitle").value.trim();
+      const info = document.getElementById("cinfo").value.trim();
+      const topics = document.getElementById("ctopics").value.split("\n").map(s => s.trim()).filter(Boolean);
+      if (!topics.length) return toast("Нет тем");
+      const btn = document.getElementById("create"); btn.disabled = true; btn.textContent = "Создаю…";
+      try {
+        const r = await api("/api/admin/course/create", { json: { title, info, lang, topics } });
+        haptic("success"); toast(`Курс создаётся: ${r.topics} тем. Отчёт придёт в бот.`);
+        coursesTab(body);
+      } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = "🚀 Создать курс"; }
+    });
+  }
+  renderList(courses);
 }
 
 function adminTeacherScreen({ t }) {
