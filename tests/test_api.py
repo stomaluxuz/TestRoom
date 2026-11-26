@@ -80,6 +80,30 @@ async def test_ai_presentation_endpoint(client, monkeypatch):
         assert (await svc.get_or_create_user(db, 900)).balance == 95000
 
 
+async def test_bulk_library_upload(client, monkeypatch):
+    """Админ грузит пачку файлов → принимаются и уходят в фон на авто-сортировку."""
+    from app import api as apimod
+
+    calls = []
+
+    async def fake_run(admin_id, saved):
+        calls.append((admin_id, len(saved)))
+
+    monkeypatch.setattr(apimod, "_run_bulk_import", fake_run)
+    T = headers(ADMIN_ID)
+    files = [
+        ("files", ("anatomy.txt", b"anatomy of the skull bones", "text/plain")),
+        ("files", ("caries.txt", b"dental caries prevention", "text/plain")),
+    ]
+    r = await client.post("/api/admin/library/bulk_upload", headers=T, files=files)
+    assert r.status_code == 200 and r.json()["count"] == 2 and r.json()["queued"] is True
+    assert calls and calls[0][1] == 2
+    # не админ — нельзя
+    r = await client.post("/api/admin/library/bulk_upload", headers=headers(777),
+                          files=[("files", ("x.txt", b"x", "text/plain"))])
+    assert r.status_code == 403
+
+
 async def test_song_endpoint(client, monkeypatch):
     """Песня: без ключа сервиса песен — 503; с ключом — ставится в очередь и платят ВСЕ."""
     from app import api as apimod

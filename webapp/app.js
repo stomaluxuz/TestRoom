@@ -2028,6 +2028,12 @@ async function libraryTab(body) {
     subjects = await api("/api/library/subjects");
   } catch (e) { return toast(e.message); }
   body.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">📚 Массовая загрузка книг</h2>
+      <p class="muted small" style="margin:0 0 8px">Выберите сразу несколько файлов (.pdf, .docx, .txt) — ИИ сам разложит их по предметам. Отчёт придёт в бот, затем подтвердите материалы ниже.</p>
+      <input id="bulkfiles" type="file" accept=".pdf,.docx,.txt" multiple>
+      <button class="btn" id="bulkgo" style="margin-top:8px">⬆️ Загрузить пачкой</button>
+    </div>
     <h2>На модерации (${pending.length})</h2>
     <div id="pend"></div>
     <div class="card">
@@ -2094,6 +2100,19 @@ async function libraryTab(body) {
     if (!name) return toast("Введите название");
     try { await api("/api/admin/library/subjects", { json: { name } }); document.getElementById("newsub").value = ""; toast("Добавлено"); reloadSubs(); }
     catch (e) { toast(e.message); }
+  });
+  on("#bulkgo", "click", async () => {
+    const files = document.getElementById("bulkfiles").files;
+    if (!files || !files.length) return toast("Выберите файлы");
+    const fd = new FormData();
+    for (const f of files) fd.append("files", f);
+    const btn = document.getElementById("bulkgo"); btn.disabled = true; btn.textContent = "Загрузка…";
+    try {
+      const r = await api("/api/admin/library/bulk_upload", { body: fd, method: "POST" });
+      haptic("success"); toast(`Принято ${r.count}. Разложу по предметам — отчёт придёт в бот.`);
+      document.getElementById("bulkfiles").value = "";
+    } catch (e) { toast(e.message); }
+    btn.disabled = false; btn.textContent = "⬆️ Загрузить пачкой";
   });
   renderPending(pending);
   renderSubs(subjects);
