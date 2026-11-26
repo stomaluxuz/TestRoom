@@ -1271,6 +1271,35 @@ async def student_history(db: AsyncSession, user: User) -> list[dict]:
     ]
 
 
+async def student_mistakes(db: AsyncSession, user: User, limit: int = 60) -> list[dict]:
+    """Вопросы, на которые студент отвечал НЕВЕРНО (для разбора/повторения).
+    По одному на вопрос — берём самый недавний неверный ответ."""
+    rows = (await db.execute(
+        select(Answer.question_id, Answer.chosen)
+        .join(Attempt, Attempt.id == Answer.attempt_id)
+        .where(Attempt.user_id == user.id, Answer.is_correct.is_(False))
+        .order_by(Answer.answered_at.desc())
+    )).all()
+    seen: dict[int, int] = {}
+    for qid, chosen in rows:
+        if qid not in seen:
+            seen[qid] = chosen
+        if len(seen) >= limit:
+            break
+    if not seen:
+        return []
+    qs = await db.scalars(select(Question).where(Question.id.in_(list(seen.keys()))))
+    qmap = {q.id: q for q in qs}
+    out = []
+    for qid in seen:  # сохраняем порядок «от свежих к старым»
+        q = qmap.get(qid)
+        if q is None or not q.active:
+            continue
+        out.append({"id": q.id, "text": q.text, "options": q.options,
+                    "correct": q.correct, "chosen": seen[qid]})
+    return out
+
+
 # ---------------------------------------------------------------- учитель: статистика
 
 async def active_session(db: AsyncSession, teacher: User) -> dict | None:

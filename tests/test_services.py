@@ -86,6 +86,23 @@ async def test_no_review_while_group_test_running(db):
     assert after["review"][0]["correct"] is not None
 
 
+async def test_student_mistakes(db):
+    """«Мои ошибки»: неверно отвеченные вопросы собираются для разбора."""
+    t = await make_teacher(db)
+    test = await make_test(db, t, 3)
+    st = await make_student(db, 965, "Ошибающийся Студент")
+    s = await svc.start_session(db, t, test.id, "101", 30, 3)
+    a = await svc.join_by_code(db, st, s.code)
+    state = await svc.attempt_state(db, st, a.id)
+    while state["status"] == "active":
+        q = state["question"]
+        ci = correct_index(state, q["text"])
+        state = await svc.submit_answer(db, st, a.id, q["id"], (ci + 1) % len(q["options"]))  # всегда неверно
+    mistakes = await svc.student_mistakes(db, st)
+    assert len(mistakes) == 3
+    assert all(m["chosen"] != m["correct"] and m["text"] for m in mistakes)
+
+
 async def test_show_answers_reveals_immediately(db):
     """Если учитель включил «показывать сразу» — разбор доступен сразу (его осознанный выбор)."""
     t = await make_teacher(db)

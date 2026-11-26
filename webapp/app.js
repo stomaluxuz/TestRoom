@@ -67,6 +67,8 @@ const T = {
     streak_days: "дн.", st_solved: "решено", st_avg: "средний", st_mistakes: "ошибок",
     quick_title: "Создавай и учись", results_title: "Мои результаты",
     sub_history: "История", sub_apply: "Отправить заявку", sub_open_tests: "Открытые тесты", sub_upload: "Свой файл",
+    mistakes_title: "Мои ошибки", sub_mistakes: "Разбор", your_answer: "Твой ответ", correct_answer: "Правильно",
+    no_mistakes: "Ошибок нет — отлично! 🎉",
     teacher: "Преподаватель", plan_free: "Бесплатный тариф", plan_pro: "Pro до",
     test_running: "Идёт тест", code: "код", time_left: "осталось",
     my_tests: "Мои тесты", upload_test: "Загрузить тест", history: "История запусков",
@@ -168,6 +170,8 @@ const T = {
     streak_days: "kun", st_solved: "yechildi", st_avg: "o'rtacha", st_mistakes: "xato",
     quick_title: "Yarating va o'rganing", results_title: "Mening natijalarim",
     sub_history: "Tarix", sub_apply: "Ariza yuborish", sub_open_tests: "Ochiq testlar", sub_upload: "O'z fayling",
+    mistakes_title: "Mening xatolarim", sub_mistakes: "Tahlil", your_answer: "Sizning javobingiz", correct_answer: "To'g'ri",
+    no_mistakes: "Xatolar yo'q — zo'r! 🎉",
     teacher: "O'qituvchi", plan_free: "Bepul tarif", plan_pro: "Pro:",
     test_running: "Test ketmoqda", code: "kod", time_left: "qoldi",
     my_tests: "Mening testlarim", upload_test: "Test yuklash", history: "Ishga tushirishlar tarixi",
@@ -269,6 +273,8 @@ const T = {
     streak_days: "d", st_solved: "solved", st_avg: "average", st_mistakes: "mistakes",
     quick_title: "Create & learn", results_title: "My results",
     sub_history: "History", sub_apply: "Send a request", sub_open_tests: "Open tests", sub_upload: "Your file",
+    mistakes_title: "My mistakes", sub_mistakes: "Review", your_answer: "Your answer", correct_answer: "Correct",
+    no_mistakes: "No mistakes — great! 🎉",
     teacher: "Teacher", plan_free: "Free plan", plan_pro: "Pro until",
     test_running: "Test in progress", code: "code", time_left: "left",
     my_tests: "My tests", upload_test: "Upload test", history: "Launch history",
@@ -1036,6 +1042,7 @@ const ICONS = {
   home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
   gamepad: '<rect x="2" y="6" width="20" height="12" rx="5"/><path d="M7 11v3M5.5 12.5h3"/><circle cx="15.5" cy="11.5" r="1.1"/><circle cx="18" cy="14" r="1.1"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-6.5 8-6.5s8 2.3 8 6.5"/>',
+  repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V10a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
 };
 function svgIcon(name) {
   const p = ICONS[name] || ICONS.book;
@@ -1080,6 +1087,7 @@ async function studentHome() {
       ${gcard("mytests", "book", t("my_tests_training"), t("sub_open_tests"), "violet")}
       ${gcard("upload", "upload", t("upload_my_test"), t("sub_upload"), "orange")}
       ${ME.song_enabled ? gcard("song", "music", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "", "pink") : ""}
+      ${gcard("mistakes", "repeat", t("mistakes_title"), t("sub_mistakes"), "red")}
       ${gcard("results", "chart", t("results_title"), t("sub_history"), "emerald")}
       ${ME.teacher_pending ? "" : gcardWide("torole", "cap", t("become_teacher"), t("sub_apply"), "teal")}
     </div>
@@ -1099,6 +1107,7 @@ async function studentHome() {
   on("#upload", "click", () => go(uploadScreen));
   on("#torole", "click", () => go(universityPickerScreen));
   on("#results", "click", () => go(studentResultsScreen));
+  on("#mistakes", "click", () => go(mistakesScreen));
   on("#topup", "click", () => { toast("Откройте чат бота и нажмите «💳 Пополнить баланс»"); try { tg && tg.close(); } catch (e) {} });
   async function join() {
     if (code.value.length !== 6) { toast(t("code_6")); return; }
@@ -1127,6 +1136,28 @@ async function studentResultsScreen() {
     try { go(attemptScreen, { state: await api(`/api/student/attempts/${el2.dataset.id}`) }); }
     catch (e) { toast(e.message); }
   });
+}
+
+// «Мои ошибки» — разбор неверно отвеченных вопросов
+async function mistakesScreen() {
+  render(`${langBar()}<h1>🔁 ${t("mistakes_title")}</h1><div id="mk" class="muted small">${t("loading")}</div>`);
+  let list;
+  try { list = await api("/api/student/mistakes"); } catch (e) { return toast(e.message); }
+  const el = document.getElementById("mk");
+  if (!el) return;
+  el.className = "";
+  if (!list.length) { el.innerHTML = `<div class="card muted" style="text-align:center">${t("no_mistakes")}</div>`; return; }
+  el.innerHTML = list.map(q => {
+    const opts = (q.options || []).map((o, i) => {
+      let cls = "mkopt";
+      if (i === q.correct) cls += " ok";
+      else if (i === q.chosen) cls += " bad";
+      const tag = i === q.correct ? ` <b class="mktag ok">✓ ${t("correct_answer")}</b>`
+        : (i === q.chosen ? ` <b class="mktag bad">✗ ${t("your_answer")}</b>` : "");
+      return `<div class="${cls}">${esc(o)}${tag}</div>`;
+    }).join("");
+    return `<div class="card"><div style="font-weight:600;margin-bottom:8px">${esc(q.text)}</div>${opts}</div>`;
+  }).join("");
 }
 
 function attemptScreen({ state }) {

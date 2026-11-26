@@ -928,6 +928,10 @@ def create_app() -> FastAPI:
     async def my_history(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         return await svc.student_history(db, user)
 
+    @app.get("/api/student/mistakes")
+    async def my_mistakes(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        return await svc.student_mistakes(db, user)
+
     # ------------------------------------------------ библиотека (чтение — все, загрузка — препод)
     @app.get("/api/library/subjects")
     async def library_subjects(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
