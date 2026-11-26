@@ -57,6 +57,13 @@ _KW = {
                 "антибиотик", "анальгетик", "анестетик", "побочн", "НПВС", "антисептик"),
 }
 
+# Подписи на языке презентации (промах → ru): под картинкой, на титуле и на слайде литературы.
+_L = {
+    "ru": {"mat": "По материалам", "src": "Источник", "refs": "Источники и литература"},
+    "uz": {"mat": "Manbalar asosida", "src": "Manba", "refs": "Foydalanilgan adabiyotlar"},
+    "en": {"mat": "Based on", "src": "Source", "refs": "References"},
+}
+
 
 def detect_theme(topic: str) -> str:
     """Определяет предмет по словам в теме → ключ темы оформления. Не нашли — 'default'."""
@@ -183,10 +190,12 @@ def _photo_card(slide, l, t, w, h, img_bytes, ar):
 # ------------------------------------------------------------------ сборка
 
 def assemble_themed(title: str, subtitle: str, slides: list[dict],
-                    sources: list[str] | None = None, theme: str | None = None) -> tuple[str, bytes]:
+                    sources: list[str] | None = None, theme: str | None = None,
+                    lang: str = "ru") -> tuple[str, bytes]:
     # Авто-подбор ЦВЕТА по теме (подпись предмета не показываем — чтобы промахи не вылезали текстом).
     key = theme or detect_theme(" ".join([title] + [s.get("title", "") for s in slides]))
     accent = THEMES.get(key, THEMES["default"])[0]
+    L = _L.get(lang, _L["ru"])
     sources = [s for s in (sources or []) if s]
 
     prs = Presentation()
@@ -214,16 +223,21 @@ def assemble_themed(title: str, subtitle: str, slides: list[dict],
     if sources:
         btf = _tb(s0, 0.9, PH - 0.95, PW - 1.8, 0.65, MSO_ANCHOR.MIDDLE)
         br = btf.paragraphs[0].add_run()
-        br.text = "По материалам: " + "; ".join(sources[:2]); _font(br, SANS, 12, WHITE); _track(br, 0.4)
+        br.text = L["mat"] + ": " + "; ".join(sources[:2]); _font(br, SANS, 12, WHITE); _track(br, 0.4)
 
     # ---- содержательные ----
     for sl in slides:
         s = prs.slides.add_slide(blank); _bg(s)
         _rect(s, 0, 0, 0.14, PH, accent)  # боковая акцентная полоса
         imgs_raw = [b for b in (sl.get("images") or []) if b] or ([sl["img_bytes"]] if sl.get("img_bytes") else [])
+        meta_raw = sl.get("image_src") or []  # подпись (что это) + источник (книга), выровнены с images
         # Проверяем и перекодируем каждую картинку. Битые/неподдерживаемые отбрасываем —
         # тогда слайд станет текстовым на всю ширину, а НЕ с пустой белой рамкой.
-        imgs = [v for v in (_prep_image(b) for b in imgs_raw) if v]  # [(bytes, aspect), ...]
+        imgs = []  # [(bytes, aspect, meta), ...]
+        for i, b in enumerate(imgs_raw):
+            v = _prep_image(b)
+            if v:
+                imgs.append((v[0], v[1], meta_raw[i] if i < len(meta_raw) else {}))
         body_w = 6.9 if imgs else 10.5
         htf = _tb(s, 0.7, 0.62, body_w, 1.0, MSO_ANCHOR.MIDDLE)
         htf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE  # длинный заголовок ужмётся, не наедет на список
@@ -234,9 +248,41 @@ def assemble_themed(title: str, subtitle: str, slides: list[dict],
         bl = [b for b in (sl.get("bullets") or []) if b.strip()] or [" "]
         _bullets(s, 0.7, 2.05, body_w, 4.55, bl, accent)
         if imgs:
-            _photo_card(s, 8.0, 1.9, 4.6, 4.2, imgs[0][0], imgs[0][1])
+            data0, ar0, m0 = imgs[0]
+            _photo_card(s, 8.0, 1.75, 4.6, 3.95, data0, ar0)
+            # подпись под картинкой: что это (caption) + из какой книги (source)
+            cap = (m0.get("caption") or "").strip()
+            src = (m0.get("source") or "").strip()
+            cline = cap
+            if src:
+                cline = (cap + " — " if cap else L["src"] + ": ") + src
+            if cline:
+                ctf = _tb(s, 8.0, 5.82, 4.6, 0.95); ctf.word_wrap = True
+                cr = ctf.paragraphs[0].add_run(); cr.text = cline[:150]
+                cr.font.italic = True; _font(cr, SANS, 10, MUTED)
         _rect(s, 0.7, PH - 0.62, PW - 1.4, 0.012, HAIR)
         ft = _tb(s, 0.7, PH - 0.55, PW - 1.4, 0.4).paragraphs[0].add_run()
+        ft.text = "TestRoom"; _font(ft, SANS, 9, MUTED)
+
+    # ---- слайд «Литература» (список книг-источников со ссылками) ----
+    uniq = []
+    for src in sources:
+        src = (src or "").strip()
+        if src and src not in uniq:
+            uniq.append(src)
+    if uniq:
+        sr = prs.slides.add_slide(blank); _bg(sr)
+        _rect(sr, 0, 0, 0.14, PH, accent)
+        htf = _tb(sr, 0.7, 0.62, PW - 1.4, 1.0, MSO_ANCHOR.MIDDLE)
+        hr = htf.paragraphs[0].add_run(); hr.text = "📚 " + L["refs"]; _font(hr, HEAD, 28, INK, bold=True)
+        _rect(sr, 0.72, 1.68, 1.1, 0.07, accent, MSO_SHAPE.ROUNDED_RECTANGLE, round_adj=0.5)
+        ltf = _tb(sr, 0.7, 2.1, PW - 1.4, PH - 2.9); ltf.word_wrap = True
+        for i, src in enumerate(uniq[:14], 1):
+            p = ltf.paragraphs[0] if i == 1 else ltf.add_paragraph()
+            p.space_after = Pt(7)
+            nr = p.add_run(); nr.text = f"{i}. "; _font(nr, SANS, 15, accent, bold=True)
+            tr = p.add_run(); tr.text = src[:180]; _font(tr, SANS, 15, BODY)
+        ft = _tb(sr, 0.7, PH - 0.55, PW - 1.4, 0.4).paragraphs[0].add_run()
         ft.text = "TestRoom"; _font(ft, SANS, 9, MUTED)
 
     buf = io.BytesIO(); prs.save(buf)

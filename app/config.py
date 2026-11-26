@@ -78,7 +78,7 @@ class Settings:
     # Картинки ИЗ КНИГ библиотеки как источник фото для слайдов (вырезаем иллюстрации из PDF,
     # подписываем зрением, ищем по теме). Выключено по умолчанию: включать LIBRARY_FIGURES=1.
     # ВНИМАНИЕ: это копирайтные учебники — включать на усмотрение оператора.
-    library_figures_enabled: bool = field(default_factory=lambda: os.getenv("LIBRARY_FIGURES", "0") == "1")
+    library_figures_enabled: bool = field(default_factory=lambda: os.getenv("LIBRARY_FIGURES", "1") != "0")
     # Сколько фигур из книги подмешивать в кандидаты на слайд (их финально оценит зрение).
     library_figures_topk: int = field(default_factory=lambda: int(os.getenv("LIBRARY_FIGURES_TOPK", "3")))
     # Когда резать иллюстрации из одобренной книги (режет = тяжело: 1 vision + 1 эмбеддинг на фигуру):

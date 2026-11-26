@@ -337,7 +337,10 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
             except Exception:
                 picked = []  # зрение недоступно — лучше слайд без фото, чем картинка «не в тему»
             # picked ПУСТОЙ = зрение забраковало всё (не по теме) → слайд без фото (не «собака»).
-            sl["_approved"] = [(cands[i]["data"], cands[i].get("ah")) for i in picked]
+            sl["_approved"] = [
+                (cands[i]["data"], cands[i].get("ah"), cands[i].get("caption", ""), cands[i].get("source", ""))
+                for i in picked
+            ]
 
     # Общий лимит времени на фото-этап: медленный/мёртвый источник не должен растягивать
     # генерацию на минуты и подвешивать Mini App. По истечении бюджета слайды, что не успели,
@@ -354,8 +357,11 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
     # пропуская те, что уже стоят на других слайдах (если лучшее занято — берёт следующее своё).
     used: list[int] = []
     for sl in targets:
-        imgs = []
-        for data, ah in sl.pop("_approved", []):
+        imgs, metas = [], []
+        for item in sl.pop("_approved", []):
+            data, ah = item[0], item[1]
+            cap = item[2] if len(item) > 2 else ""
+            src = item[3] if len(item) > 3 else ""
             if len(imgs) >= max_per_slide:
                 break
             if ah is not None and any(_hamming(ah, h) <= 6 for h in used):
@@ -363,5 +369,7 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
             if ah is not None:
                 used.append(ah)
             imgs.append(data)
+            metas.append({"caption": cap, "source": src})
         if imgs:
             sl["images"] = imgs
+            sl["image_src"] = metas  # подпись (что это) + источник (книга) для каждой картинки

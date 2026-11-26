@@ -441,7 +441,7 @@ def build_doc_docx(title: str, text: str) -> tuple[str, bytes]:
 
 async def build_presentation(
     text: str, *, domain: str | None = None, max_per_slide: int = 1,
-    sources: list[str] | None = None, style: str = "modern"
+    sources: list[str] | None = None, style: str = "modern", lang: str = "ru"
 ) -> tuple[str, bytes]:
     """С фото: для слайдов с запросом IMG собирает кандидатов из нескольких источников
     (по сфере темы) и выбирает лучшую картинку зрением Claude. Источник выверенных,
@@ -465,4 +465,5 @@ async def build_presentation(
     from . import themes  # тематическое оформление: цвет подбирается авто по теме + бренд TestRoom
     # Сборка .pptx (python-pptx) — тяжёлая синхронная работа; уводим в поток, чтобы не
     # блокировать event loop (иначе на время сборки «подвисают» бот и приложение для всех).
-    return await asyncio.to_thread(themes.assemble_themed, title, subtitle, slides, sources=sources)
+    return await asyncio.to_thread(
+        themes.assemble_themed, title, subtitle, slides, sources=sources, lang=lang)

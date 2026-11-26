@@ -251,7 +251,7 @@ async def ai_chat(db: AsyncSession, user: User, messages: list[dict], lang: str 
             await db.rollback()
             async with limits.gen_slot():
                 body = await ai.generate_slides(topic, slides=slides, lang=lang, context=c.get("context", ""))
-                fname, blob = await present.build_presentation(body, max_per_slide=2, sources=c.get("sources"))
+                fname, blob = await present.build_presentation(body, max_per_slide=2, sources=c.get("sources"), lang=lang)
             await send_file(fname, blob, f"🖥 {topic}")
             return f"Презентация «{topic}» ({slides} сл.) отправлена в бот."
         if name == "create_test":
@@ -2566,10 +2566,16 @@ async def _get_fig_cache(db: AsyncSession):
         from . import embeddings as emb
 
         rows = (await db.execute(
-            select(LibraryFigure.id, LibraryFigure.doc_id, LibraryFigure.path, LibraryFigure.vector)
+            select(LibraryFigure.id, LibraryFigure.doc_id, LibraryFigure.path, LibraryFigure.vector,
+                   LibraryFigure.caption, LibraryDoc.book_title, LibraryDoc.title, LibraryDoc.filename)
+            .join(LibraryDoc, LibraryDoc.id == LibraryFigure.doc_id)
             .where(LibraryFigure.vector.is_not(None))
         )).all()
-        _fig_cache = [(fid, did, path, emb.unpack(blob)) for fid, did, path, blob in rows if blob]
+        # (id, doc_id, path, vector, подпись-зрением, название_книги) — подпись и книга попадут на слайд
+        _fig_cache = [
+            (fid, did, path, emb.unpack(blob), (cap or ""), (bt or ti or fn or "Kitob"))
+            for fid, did, path, blob, cap, bt, ti, fn in rows if blob
+        ]
     return _fig_cache
 
 
@@ -2700,9 +2706,10 @@ async def figure_candidates_for(topic: str, k: int | None = None) -> list[dict]:
             cache = await _get_fig_cache(db)
     if not cache:
         return []
-    scored = sorted(((emb.dot(qv, vec), fid, path) for fid, did, path, vec in cache), reverse=True)
+    scored = sorted(((emb.dot(qv, vec), fid, path, cap, book)
+                     for fid, did, path, vec, cap, book in cache), reverse=True)
     out: list[dict] = []
-    for score, fid, path in scored[: k * 2]:
+    for score, fid, path, cap, book in scored[: k * 2]:
         try:
             with open(path, "rb") as fh:
                 data = fh.read()
@@ -2711,7 +2718,9 @@ async def figure_candidates_for(topic: str, k: int | None = None) -> list[dict]:
         vb, ah = _thumb_and_hash(data)
         if not vb:
             continue
-        out.append({"data": data, "vb64": vb, "ah": ah, "source": "Библиотека (книга)", "path": path})
+        # caption — что изображено (подпись зрением), source — из какой книги: оба уйдут под картинку
+        out.append({"data": data, "vb64": vb, "ah": ah, "source": book or "Kitob",
+                    "caption": cap or "", "path": path})
         if len(out) >= k:
             break
     return out

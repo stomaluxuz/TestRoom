@@ -62,3 +62,43 @@ async def test_ai_requires_key():
     settings.anthropic_api_key = ""
     with pytest.raises(ServiceError):
         await ai.generate_slides("Анатомия сердца")  # без ключа ИИ-режим недоступен
+
+
+def test_presentation_captions_and_references():
+    """Под картинкой — подпись (что это) + источник; в конце — слайд литературы; заголовок на языке."""
+    import io
+    from PIL import Image
+    from pptx import Presentation
+    from app import themes
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, format="PNG")
+    png = buf.getvalue()
+
+    slides = [{
+        "title": "Yurak", "bullets": ["Miokard (yurak mushagi) qisqaradi"],
+        "images": [png], "image_src": [{"caption": "Yurak kesimi", "source": "Anatomiya atlasi"}],
+    }]
+    name, blob = themes.assemble_themed(
+        "Yurak anatomiyasi", "qisqa", slides,
+        sources=["Anatomiya atlasi", "Fiziologiya darsligi"], lang="uz")
+
+    prs = Presentation(io.BytesIO(blob))
+    alltext = " ".join(
+        sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
+    assert "Yurak kesimi" in alltext            # подпись под картинкой (что изображено)
+    assert "Anatomiya atlasi" in alltext        # источник книги
+    assert "Foydalanilgan adabiyotlar" in alltext  # слайд литературы на узбекском
+    assert "Fiziologiya darsligi" in alltext    # вторая книга в списке литературы
+
+
+def test_presentation_references_localized_ru():
+    import io
+    from pptx import Presentation
+    from app import themes
+    name, blob = themes.assemble_themed("Тема", "", [{"title": "A", "bullets": ["x"]}],
+                                        sources=["Книга 1"], lang="ru")
+    prs = Presentation(io.BytesIO(blob))
+    alltext = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
+    assert "Источники и литература" in alltext
+    assert "Книга 1" in alltext

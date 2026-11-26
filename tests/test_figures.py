@@ -15,9 +15,14 @@ async def _make_pending_pdf(db, title="Книга"):
     return d
 
 
-async def test_figures_disabled_by_default(db):
-    # по умолчанию флаг выключен → фичи нет, обычное поведение
-    assert settings.library_figures_enabled is False
+async def test_figures_enabled_by_default():
+    # извлечение фигур из книг теперь ВКЛЮЧЕНО по умолчанию (доделали фичу)
+    assert settings.library_figures_enabled is True
+
+
+async def test_figures_disabled_behaviour(db, monkeypatch):
+    # если явно выключить флаг — фич нет, обычное поведение
+    monkeypatch.setattr(settings, "library_figures_enabled", False)
     assert await svc.figure_candidates_for("кариес") == []
     await svc.get_or_create_user(db, 1, "t")
     d = LibraryDoc(subject_id=1, title="Книга", filename="b.pdf", content_type="application/pdf",

@@ -162,7 +162,7 @@ async def _run_presentation(uid, target_id, topic, lang, slides, author_name, gr
             author = f"{by}: {author_name} · {grp} {group}" if (author_name or group) else ""
             final = f"{clean_title}\n{author}\n\n{slides_part}"
             async with limits.timing("photos+build"):
-                name, blob = await build_presentation(final, max_per_slide=2, sources=ctx.get("sources"))
+                name, blob = await build_presentation(final, max_per_slide=2, sources=ctx.get("sources"), lang=lang)
         if bot_ref.bot is not None:
             from aiogram.types import BufferedInputFile
             src = ""
