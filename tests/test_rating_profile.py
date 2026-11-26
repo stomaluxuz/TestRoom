@@ -28,20 +28,34 @@ async def test_defaults(client):
     assert me["rating_public"] is False
 
 
+UNI = "Ташкентский государственный стоматологический институт (ТГСИ)"
+
+
 async def test_set_university_and_group(client):
     S = headers(601)
     r = await client.post("/api/me/student-profile", headers=S, json={
-        "university": "  Ташкентский   институт  ", "study_group": "  101  ",
+        "university": UNI, "study_group": "  101  ",
     })
     assert r.status_code == 200
     me = (await client.get("/api/me", headers=S)).json()
-    assert me["university"] == "Ташкентский институт"  # схлопнутые пробелы
-    assert me["study_group"] == "101"
+    assert me["university"] == UNI
+    assert me["study_group"] == "101"  # схлопнутые пробелы
+
+
+async def test_university_must_be_from_list(client):
+    """Произвольный (не из списка) вуз отклоняется — чтобы рейтинг не дробился."""
+    S = headers(604)
+    r = await client.post("/api/me/student-profile", headers=S, json={
+        "university": "Мой домашний вуз", "study_group": "101",
+    })
+    assert r.status_code >= 400
+    me = (await client.get("/api/me", headers=S)).json()
+    assert me["university"] is None  # ничего не сохранилось
 
 
 async def test_empty_clears_fields(client):
     S = headers(602)
-    await client.post("/api/me/student-profile", headers=S, json={"university": "Вуз", "study_group": "5"})
+    await client.post("/api/me/student-profile", headers=S, json={"university": UNI, "study_group": "5"})
     await client.post("/api/me/student-profile", headers=S, json={"university": "", "study_group": ""})
     me = (await client.get("/api/me", headers=S)).json()
     assert me["university"] is None and me["study_group"] is None

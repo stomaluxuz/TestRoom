@@ -91,6 +91,7 @@ const T = {
     rating_title: "Рейтинг", rating_visible: "Показывать меня в рейтинге",
     rating_hint: "Когда включено — другие видят ваше имя и место. Выключите, чтобы остаться анонимно: своё место видите только вы, баллы считаются всегда.",
     choose_vuz_student: "Выберите вуз и укажите номер группы для рейтинга.", save_vuz_group: "Сохранить",
+    vuz_not_chosen: "Вуз не выбран", pick_vuz_list: "Выберите вуз из списка.",
     rating_open: "Рейтинг", rating_sub: "Твоё место среди своих",
     rating_group: "Моя группа", rating_uni: "Мой вуз",
     rating_pts: "очк.", rating_tests_n: "тестов", anon: "Аноним",
@@ -217,6 +218,7 @@ const T = {
     rating_title: "Reyting", rating_visible: "Reytingda ko'rsatilsin",
     rating_hint: "Yoqilganda — boshqalar ismingiz va o'rningizni ko'radi. O'chirsangiz anonim qolasiz: o'rningizni faqat o'zingiz ko'rasiz, ballar baribir hisoblanadi.",
     choose_vuz_student: "Reyting uchun OTMni tanlang va guruh raqamini kiriting.", save_vuz_group: "Saqlash",
+    vuz_not_chosen: "OTM tanlanmagan", pick_vuz_list: "OTMni ro'yxatdan tanlang.",
     rating_open: "Reyting", rating_sub: "O'zingiznikilar orasida o'rningiz",
     rating_group: "Mening guruhim", rating_uni: "Mening OTM",
     rating_pts: "ball", rating_tests_n: "test", anon: "Anonim",
@@ -343,6 +345,7 @@ const T = {
     rating_title: "Rating", rating_visible: "Show me in the rating",
     rating_hint: "When on, others see your name and rank. Turn it off to stay anonymous: only you see your rank, and points are counted either way.",
     choose_vuz_student: "Choose your university and enter your group number for the rating.", save_vuz_group: "Save",
+    vuz_not_chosen: "No university chosen", pick_vuz_list: "Choose a university from the list.",
     rating_open: "Rating", rating_sub: "Your place among peers",
     rating_group: "My group", rating_uni: "My university",
     rating_pts: "pts", rating_tests_n: "tests", anon: "Anonymous",
@@ -767,18 +770,19 @@ async function profileScreen() {
   });
 }
 
-// Студент указывает вуз (поиск по списку) и номер группы — область для рейтинга.
+// Студент выбирает вуз СТРОГО из списка (поиск только фильтрует) и вводит номер группы.
 async function studentProfileScreen() {
   let unis = [];
   try { unis = await api("/api/universities"); } catch (e) {}
-  let chosen = ME.university || "";
+  let chosen = unis.includes(ME.university) ? ME.university : "";  // только значение из списка
   render(`
     ${langBar()}
     <h1>${t("my_vuz_group")}</h1>
     <p class="muted">${t("choose_vuz_student")}</p>
     <div class="card">
       <label>${t("vuz")}</label>
-      <input class="search" id="usearch" placeholder="${t("search_vuz")}" autocomplete="off" value="${esc(chosen)}">
+      <div id="usel" class="selbox ${chosen ? "" : "empty"}">${chosen ? esc(chosen) : t("vuz_not_chosen")}</div>
+      <input class="search" id="usearch" placeholder="${t("search_vuz")}" autocomplete="off">
       <div id="ulist"></div>
       <label>${t("group_number")}</label>
       <input id="grp" placeholder="${t("group_ph")}" maxlength="100" value="${esc(ME.study_group || "")}">
@@ -786,6 +790,13 @@ async function studentProfileScreen() {
     </div>
   `);
   const search = document.getElementById("usearch");
+  const sel = document.getElementById("usel");
+  function setChosen(u) {
+    chosen = u;
+    sel.textContent = u || t("vuz_not_chosen");
+    sel.classList.toggle("empty", !u);
+    search.value = ""; document.getElementById("ulist").innerHTML = "";
+  }
   function drawList(q) {
     const ql = (q || "").trim().toLowerCase();
     const el = document.getElementById("ulist");
@@ -795,14 +806,14 @@ async function studentProfileScreen() {
     el.innerHTML = found.length
       ? found.map(u => `<div class="item uni" data-u="${esc(u)}"><div class="grow">${esc(u)}</div></div>`).join("")
       : `<p class="muted small">${t("vuz_not_found")}</p>`;
-    onAll(".uni", "click", el2 => { chosen = el2.dataset.u; search.value = chosen; el.innerHTML = ""; });
+    onAll(".uni", "click", el2 => setChosen(el2.dataset.u));  // выбор — ТОЛЬКО кликом по списку
   }
-  search.addEventListener("input", e => { chosen = e.target.value; drawList(e.target.value); });
+  search.addEventListener("input", e => drawList(e.target.value));  // ввод только фильтрует
   on("#save", "click", async () => {
-    const university = (search.value || "").trim();
     const study_group = document.getElementById("grp").value.trim();
+    if (!chosen || !unis.includes(chosen)) return toast(t("pick_vuz_list"));  // строго из списка
     try {
-      await api("/api/me/student-profile", { json: { university, study_group } });
+      await api("/api/me/student-profile", { json: { university: chosen, study_group } });
       ME = await api("/api/me"); haptic("success"); toast(t("saved")); back();
     } catch (e) { toast(e.message); }
   });

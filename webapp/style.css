@@ -97,6 +97,9 @@ input, select, textarea { width: 100%; padding: 11px 12px; border-radius: 10px; 
   background: var(--bg); color: var(--text); font-size: 15px; margin-top: 4px; font-family: inherit; }
 textarea { min-height: 70px; resize: vertical; }
 label { display: block; margin-top: 12px; font-size: 13px; color: var(--hint); }
+.selbox { margin-top: 6px; padding: 11px 12px; border-radius: 12px; background: var(--brand-soft); color: var(--text);
+  font-size: 14px; font-weight: 600; line-height: 1.35; }
+.selbox.empty { background: #eceef1; color: var(--hint); font-weight: 400; }
 .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; color: var(--text); font-size: 14px; }
 .check input { width: auto; margin: 0; }
 .code-input { font-size: 30px; letter-spacing: 10px; text-align: center; font-weight: 600; }

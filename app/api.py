@@ -574,8 +574,11 @@ def create_app() -> FastAPI:
     async def set_student_profile(
         body: StudentProfileIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
     ):
-        """Вуз и группа студента — область для рейтинга."""
-        await svc.set_student_profile(db, user, body.university, body.study_group)
+        """Вуз и группа студента — область для рейтинга. Вуз — строго из списка."""
+        uni = " ".join((body.university or "").split())
+        if uni and uni not in UNIVERSITIES:
+            raise svc.ServiceError("Выберите вуз из списка.")
+        await svc.set_student_profile(db, user, uni, body.study_group)
         return {"university": user.university, "study_group": user.study_group}
 
     @app.post("/api/me/rating")
