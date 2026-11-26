@@ -304,6 +304,20 @@ class SubjectIn(BaseModel):
     name: str
 
 
+class TestGenIn(BaseModel):
+    subject_id: int
+    title: str = ""
+    topic: str
+    count: int = Field(10, ge=1, le=40)
+    difficulty: str = "medium"
+    lang: str = "ru"
+
+
+class EmptyTestIn(BaseModel):
+    subject_id: int
+    title: str
+
+
 class QuestionIn(BaseModel):
     text: str
     options: list[str]
@@ -596,6 +610,31 @@ def create_app() -> FastAPI:
             return {"saved": False, **report}
         test = await svc.create_test(db, user, subject_id, title, parsed.questions)
         return {"saved": True, "test_id": test.id, **report}
+
+    @app.post("/api/teacher/tests/generate")
+    async def generate_test(body: TestGenIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Создать тест с помощью ИИ: по теме генерим вопросы и сохраняем в тест преподавателя."""
+        from . import limits
+        from .ai import generate_test_questions
+        svc.require_teacher(user)
+        topic = (body.topic or "").strip()
+        if not topic:
+            raise svc.ServiceError("Напишите тему теста.")
+        lang = body.lang if body.lang in ("ru", "uz", "en") else "ru"
+        diff = body.difficulty if body.difficulty in ("easy", "medium", "hard") else "medium"
+        async with limits.gen_slot(), limits.timing("teacher-test-gen"):
+            parsed = await generate_test_questions(topic, count=body.count, lang=lang, difficulty=diff)
+        if not parsed:
+            raise svc.ServiceError("Не удалось собрать вопросы, попробуйте другую тему.")
+        test = await svc.create_test(db, user, body.subject_id, (body.title or topic)[:300], parsed)
+        return {"test_id": test.id, "count": len(parsed)}
+
+    @app.post("/api/teacher/tests/empty")
+    async def empty_test(body: EmptyTestIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Создать пустой тест (для ручного наполнения вопросами в редакторе)."""
+        svc.require_teacher(user)
+        test = await svc.create_test(db, user, body.subject_id, body.title, [], allow_empty=True)
+        return {"test_id": test.id}
 
     @app.get("/api/teacher/tests/{test_id}")
     async def get_test(test_id: int, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):

@@ -577,7 +577,8 @@ async def _own_test(db: AsyncSession, teacher: User, test_id: int) -> Test:
 
 
 async def create_test(
-    db: AsyncSession, teacher: User, subject_id: int, title: str, questions: list[ParsedQuestion]
+    db: AsyncSession, teacher: User, subject_id: int, title: str, questions: list[ParsedQuestion],
+    allow_empty: bool = False,
 ) -> Test:
     require_active(teacher)
     subj = await db.get(Subject, subject_id)
@@ -586,7 +587,7 @@ async def create_test(
     title = " ".join((title or "").split())
     if not title:
         raise ServiceError("Введите название теста.")
-    if not questions:
+    if not questions and not allow_empty:
         raise ServiceError("В тесте нет ни одного правильно оформленного вопроса.")
     test = Test(teacher_id=teacher.id, subject_id=subj.id, title=title[:300])
     db.add(test)

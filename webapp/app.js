@@ -62,6 +62,11 @@ const T = {
     support: "🆘 Поддержка", support_hint: "Опишите проблему или вопрос — мы ответим в чате бота.",
     support_ph: "Ваше сообщение…", support_send: "Отправить", support_sent: "Отправлено ✅ Мы ответим в боте.",
     support_empty: "Напишите сообщение.",
+    create_test_title: "Создать тест", t_by_ai: "С помощью ИИ", t_by_ai_sub: "ИИ напишет вопросы",
+    t_by_manual: "Вручную", t_by_manual_sub: "Добавлять самому", t_by_file: "Загрузить файл", t_by_file_sub: "docx / xlsx / txt",
+    gen_test_topic: "Тема теста", gen_count: "Сколько вопросов", gen_difficulty: "Сложность",
+    diff_easy: "Лёгкий", diff_medium: "Средний", diff_hard: "Сложный", gen_btn: "🤖 Сгенерировать", gen_wait: "ИИ пишет вопросы…",
+    create_btn2: "Создать и наполнить",
     tab_home: "Главная", tab_games: "Игры", tab_library: "Библиотека", tab_profile: "Профиль",
     greet_morning: "Доброе утро", greet_day: "Добрый день", greet_evening: "Добрый вечер", greet_night: "Доброй ночи",
     streak_days: "дн.", st_solved: "решено", st_avg: "средний", st_mistakes: "ошибок",
@@ -168,6 +173,11 @@ const T = {
     support: "🆘 Yordam", support_hint: "Muammo yoki savolni yozing — bot chatida javob beramiz.",
     support_ph: "Xabaringiz…", support_send: "Yuborish", support_sent: "Yuborildi ✅ Botda javob beramiz.",
     support_empty: "Xabar yozing.",
+    create_test_title: "Test yaratish", t_by_ai: "AI yordamida", t_by_ai_sub: "AI savollar yozadi",
+    t_by_manual: "Qo'lda", t_by_manual_sub: "O'zingiz qo'shasiz", t_by_file: "Fayl yuklash", t_by_file_sub: "docx / xlsx / txt",
+    gen_test_topic: "Test mavzusi", gen_count: "Savollar soni", gen_difficulty: "Qiyinlik",
+    diff_easy: "Oson", diff_medium: "O'rta", diff_hard: "Qiyin", gen_btn: "🤖 Yaratish", gen_wait: "AI savollarni yozmoqda…",
+    create_btn2: "Yaratish va to'ldirish",
     tab_home: "Asosiy", tab_games: "O'yinlar", tab_library: "Kutubxona", tab_profile: "Profil",
     greet_morning: "Xayrli tong", greet_day: "Xayrli kun", greet_evening: "Xayrli kech", greet_night: "Xayrli tun",
     streak_days: "kun", st_solved: "yechildi", st_avg: "o'rtacha", st_mistakes: "xato",
@@ -274,6 +284,11 @@ const T = {
     support: "🆘 Support", support_hint: "Describe your problem or question — we'll reply in the bot chat.",
     support_ph: "Your message…", support_send: "Send", support_sent: "Sent ✅ We'll reply in the bot.",
     support_empty: "Write a message.",
+    create_test_title: "Create test", t_by_ai: "With AI", t_by_ai_sub: "AI writes the questions",
+    t_by_manual: "Manually", t_by_manual_sub: "Add them yourself", t_by_file: "Upload file", t_by_file_sub: "docx / xlsx / txt",
+    gen_test_topic: "Test topic", gen_count: "How many questions", gen_difficulty: "Difficulty",
+    diff_easy: "Easy", diff_medium: "Medium", diff_hard: "Hard", gen_btn: "🤖 Generate", gen_wait: "AI is writing questions…",
+    create_btn2: "Create and fill",
     tab_home: "Home", tab_games: "Games", tab_library: "Library", tab_profile: "Profile",
     greet_morning: "Good morning", greet_day: "Good afternoon", greet_evening: "Good evening", greet_night: "Good night",
     streak_days: "d", st_solved: "solved", st_avg: "average", st_mistakes: "mistakes",
@@ -1053,6 +1068,9 @@ const ICONS = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-6.5 8-6.5s8 2.3 8 6.5"/>',
   repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V10a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   route: '<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h6a4 4 0 0 0 4-4V9"/><path d="M15 5H9a4 4 0 0 0-4 4v6"/>',
+  spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8L21.5 17l-1.8.7L19 19.5l-.7-1.8L16.5 17l1.8-.3z"/>',
+  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
 };
 function svgIcon(name) {
   const p = ICONS[name] || ICONS.book;
@@ -1494,7 +1512,7 @@ async function teacherHome() {
     <h2>${t("quick_title")}</h2>
     <div class="grid">
       ${gcard("tests", "book", t("my_tests"), "", "blue")}
-      ${gcard("upload", "upload", t("upload_test"), "", "orange")}
+      ${gcard("createtest", "spark", t("create_test_title"), "ИИ", "orange")}
       ${gcard("presstudio", "monitor", (PRESF[LANG] || PRESF.ru).title, "ИИ", "violet")}
       ${gcard("aichat", "chat", t("ai_assistant"), ME.is_pro_plus || ME.is_admin ? "" : "Pro+", "teal")}
       ${ME.song_enabled ? gcard("song", "music", songT().title.replace("🎵 ", ""), "", "pink") : ""}
@@ -1515,7 +1533,7 @@ async function teacherHome() {
     timers.push(setInterval(() => { const el = document.getElementById("aleft"); if (el) el.textContent = fmtTime((end - Date.now()) / 1000); }, 1000));
   }
   on("#tests", "click", () => go(testsScreen));
-  on("#upload", "click", () => go(uploadScreen));
+  on("#createtest", "click", () => go(testCreateScreen));
   on("#history", "click", () => go(historyScreen));
   on("#presstudio", "click", () => go(presentationStudioScreen));
   on("#song", "click", () => go(songScreen));
@@ -1552,11 +1570,11 @@ async function testsScreen(params = {}) {
     <div class="tabs"><button class="${showArchive ? "" : "on"}" id="t-act">${t("tab_active")}</button>
       <button class="${showArchive ? "on" : ""}" id="t-arc">${t("tab_archive")} (${archivedCount})</button></div>
     ${list}
-    <button class="btn" id="upload">📤 ${t("upload_test")}</button>
+    <button class="btn" id="upload">✨ ${t("create_test_title")}</button>
   `);
   on("#t-act", "click", () => go(testsScreen, {}, true));
   on("#t-arc", "click", () => go(testsScreen, { archive: true }, true));
-  on("#upload", "click", () => go(uploadScreen));
+  on("#upload", "click", () => go(testCreateScreen));
   onAll(".subj", "click", el => go(subjectScreen, { id: +el.dataset.id, name: el.dataset.n, archive: showArchive }));
 }
 
@@ -1585,12 +1603,12 @@ async function subjectScreen(params = {}) {
     <h1 class="ell">📁 ${esc(s.name)}</h1>
     <p class="muted small" style="margin:-4px 0 10px">${showArchive ? t("arch_of_subject") : `${active} ${t("active_l")} · ${archived} ${t("arch_l")}`}</p>
     ${list}
-    <button class="btn" id="upload">📤 ${t("upload_to_subject")}</button>
+    <button class="btn" id="upload">✨ ${t("create_test_title")}</button>
     ${showArchive ? "" : `<button class="btn danger delsubj" data-id="${s.id}" data-n="${esc(s.name)}">🗑 ${t("del_subject")}</button>`}
   `);
   onAll(".ttoggle", "click", (el, e) => { e.stopPropagation(); el.classList.toggle("ell"); });
   onAll(".open", "click", el => go(testScreen, { id: +el.dataset.id }));
-  on("#upload", "click", () => go(uploadScreen, { subject_id: s.id }));
+  on("#upload", "click", () => go(testCreateScreen, { subject_id: s.id }));
   onAll(".delsubj", "click", async el => {
     if (!confirm(t("confirm_del_subject").replace("{n}", el.dataset.n))) return;
     try { await api(`/api/teacher/subjects/${el.dataset.id}`, { method: "DELETE" }); toast(t("subject_deleted")); back(); }
@@ -1813,6 +1831,115 @@ async function historyScreen() {
     onAll(".item", "click", el => go(el.dataset.active === "true" ? liveScreen : resultsScreen, { id: +el.dataset.id }));
   };
   draw("");
+}
+
+// Хаб создания теста: ИИ / вручную / файл. Преподу больше не нужно уметь писать вопросы.
+async function testCreateScreen(params = {}) {
+  render(`
+    ${langBar()}
+    <h1>${t("create_test_title")}</h1>
+    <div class="grid">
+      ${gcardWide("c-ai", "spark", t("t_by_ai"), t("t_by_ai_sub"), "orange")}
+      ${gcardWide("c-man", "pencil", t("t_by_manual"), t("t_by_manual_sub"), "blue")}
+      ${gcardWide("c-file", "upload", t("t_by_file"), t("t_by_file_sub"), "emerald")}
+    </div>
+  `);
+  on("#c-ai", "click", () => go(testAiScreen, params));
+  on("#c-man", "click", () => go(testManualScreen, params));
+  on("#c-file", "click", () => go(uploadScreen, params));
+}
+
+// Выбор предмета (select + «новый предмет»). Возвращает id предмета, создавая его при нужде.
+function subjectPicker(subjects, params) {
+  const html = `
+    <label>${t("subject_label")}</label>
+    <select id="subj">${subjects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}<option value="new">${t("new_subject_opt")}</option></select>
+    <div id="newsubj" class="${subjects.length ? "hidden" : ""}"><label>${t("subject_name_label")}</label><input id="sname" placeholder="${t("subject_name_ph")}"></div>`;
+  const wire = () => {
+    const subj = document.getElementById("subj");
+    if (params.subject_id && subjects.some(s => s.id === params.subject_id)) subj.value = String(params.subject_id);
+    else if (!subjects.length) subj.value = "new";
+    subj.addEventListener("change", () => document.getElementById("newsubj").classList.toggle("hidden", subj.value !== "new"));
+  };
+  const resolve = async () => {
+    const subj = document.getElementById("subj");
+    if (subj.value === "new") {
+      const s = await api("/api/teacher/subjects", { json: { name: document.getElementById("sname").value } });
+      return s.id;
+    }
+    return +subj.value;
+  };
+  return { html, wire, resolve };
+}
+
+// ИИ генерирует тест по теме → сразу открываем редактор с готовыми вопросами.
+async function testAiScreen(params = {}) {
+  let subjects = [];
+  try { subjects = await api("/api/teacher/subjects"); } catch (e) { return toast(e.message); }
+  const picker = subjectPicker(subjects, params);
+  const counts = [5, 10, 15, 20, 30];
+  const diffs = [["easy", t("diff_easy")], ["medium", t("diff_medium")], ["hard", t("diff_hard")]];
+  render(`
+    ${langBar()}
+    <h1>🤖 ${t("t_by_ai")}</h1>
+    <div class="card">
+      ${picker.html}
+      <label>${t("gen_test_topic")}</label><input id="topic" placeholder="${t("test_name_ph")}">
+      <label>${t("gen_count")}</label>
+      <select id="count">${counts.map(c => `<option value="${c}" ${c === 10 ? "selected" : ""}>${c}</option>`).join("")}</select>
+      <label>${t("gen_difficulty")}</label>
+      <select id="diff">${diffs.map(([v, l], i) => `<option value="${v}" ${i === 1 ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="btn" id="go">${t("gen_btn")}</button>
+    </div>
+  `);
+  picker.wire();
+  on("#go", "click", async () => {
+    const topic = document.getElementById("topic").value.trim();
+    if (!topic) return toast(t("gen_test_topic"));
+    const btn = document.getElementById("go");
+    btn.disabled = true; btn.textContent = t("gen_wait");
+    try {
+      const subject_id = await picker.resolve();
+      const r = await api("/api/teacher/tests/generate", { json: {
+        subject_id, topic, title: topic,
+        count: +document.getElementById("count").value,
+        difficulty: document.getElementById("diff").value, lang: LANG,
+      } });
+      haptic("success");
+      go(editorScreen, { id: r.test_id }, true);
+    } catch (e) {
+      toast(e.message); btn.disabled = false; btn.textContent = t("gen_btn");
+    }
+  });
+}
+
+// Создать пустой тест и добавлять вопросы вручную.
+async function testManualScreen(params = {}) {
+  let subjects = [];
+  try { subjects = await api("/api/teacher/subjects"); } catch (e) { return toast(e.message); }
+  const picker = subjectPicker(subjects, params);
+  render(`
+    ${langBar()}
+    <h1>✍️ ${t("t_by_manual")}</h1>
+    <div class="card">
+      ${picker.html}
+      <label>${t("test_name_label")}</label><input id="title" placeholder="${t("test_name_ph")}">
+      <button class="btn" id="go">${t("create_btn2")}</button>
+    </div>
+  `);
+  picker.wire();
+  on("#go", "click", async () => {
+    const title = document.getElementById("title").value.trim();
+    if (!title) return toast(t("enter_test_name"));
+    const btn = document.getElementById("go");
+    btn.disabled = true;
+    try {
+      const subject_id = await picker.resolve();
+      const r = await api("/api/teacher/tests/empty", { json: { subject_id, title } });
+      haptic("success");
+      go(editorScreen, { id: r.test_id }, true);
+    } catch (e) { toast(e.message); btn.disabled = false; }
+  });
 }
 
 async function uploadScreen(params = {}) {
