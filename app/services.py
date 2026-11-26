@@ -1316,6 +1316,71 @@ async def student_mistakes(db: AsyncSession, user: User, limit: int = 60) -> lis
     return out
 
 
+# ---------------------------------------------------------------- рейтинг студентов
+
+async def _points_by_user(db: AsyncSession, user_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """Очки: сумма правильных ответов за ПЕРВУЮ зачётную попытку по каждому тесту.
+    Зачётные = реальные сессии (не тренировка), завершённые. Пересдачи не накручивают.
+    Возвращает {user_id: (очки, число тестов)}."""
+    if not user_ids:
+        return {}
+    rows = (await db.execute(
+        select(Attempt.user_id, TestSession.test_id, Attempt.correct_count, Attempt.started_at)
+        .join(TestSession, TestSession.id == Attempt.session_id)
+        .where(Attempt.user_id.in_(user_ids),
+               TestSession.solo.is_(False),
+               Attempt.finished_at.is_not(None))
+        .order_by(Attempt.started_at.asc())
+    )).all()
+    first: dict[tuple[int, int], int] = {}  # (user, test) -> очки самой ранней попытки
+    for uid, test_id, correct, _started in rows:
+        key = (uid, test_id)
+        if key not in first:
+            first[key] = correct or 0
+    agg: dict[int, list[int]] = {}
+    for (uid, _test), correct in first.items():
+        a = agg.setdefault(uid, [0, 0])
+        a[0] += correct
+        a[1] += 1
+    return {uid: (p, n) for uid, (p, n) in agg.items()}
+
+
+async def rating_board(db: AsyncSession, user: User, scope: str = "group", limit: int = 100) -> dict:
+    """Таблица рейтинга: «Моя группа» (вуз+группа) или «Мой вуз» (весь вуз).
+    Скрытые студенты показываются как «Аноним»; сам пользователь всегда видит себя по имени
+    и своё место, даже если скрыт."""
+    scope = scope if scope in ("group", "uni") else "group"
+    uni = (user.university or "").strip()
+    grp = (user.study_group or "").strip()
+    if not uni or (scope == "group" and not grp):
+        return {"scope": scope, "available": False,
+                "need": "group" if scope == "group" else "uni",
+                "top": [], "me": None, "rating_public": bool(user.rating_public)}
+    q = select(User).where(User.university == uni, User.role == "student")
+    if scope == "group":
+        q = q.where(User.study_group == grp)
+    users = list(await db.scalars(q))
+    ids = [u.id for u in users]
+    if user.id not in ids:  # сам пользователь всегда в выборке
+        ids.append(user.id)
+        users.append(user)
+    pts = await _points_by_user(db, ids)
+    ranked = sorted(users, key=lambda u: (-(pts.get(u.id, (0, 0))[0]), (u.full_name or "").casefold()))
+    top, my_row = [], None
+    for i, u in enumerate(ranked):
+        p, n = pts.get(u.id, (0, 0))
+        me = u.id == user.id
+        name = (u.full_name or "—") if (u.rating_public or me) else "Аноним"
+        row = {"rank": i + 1, "name": name, "points": p, "tests": n,
+               "is_me": me, "hidden": not bool(u.rating_public)}
+        if me:
+            my_row = row
+        if i < limit:
+            top.append(row)
+    return {"scope": scope, "available": True, "university": uni, "group": grp,
+            "top": top, "me": my_row, "rating_public": bool(user.rating_public)}
+
+
 # ---------------------------------------------------------------- учитель: статистика
 
 async def active_session(db: AsyncSession, teacher: User) -> dict | None:

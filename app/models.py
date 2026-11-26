@@ -51,7 +51,7 @@ class User(Base):
     # Рейтинг студента: вуз и группа задают область соревнования; rating_public — видимость в таблице.
     university: Mapped[str | None] = mapped_column(Text)  # вуз студента (для рейтинга)
     study_group: Mapped[str | None] = mapped_column(String(100))  # номер группы студента
-    rating_public: Mapped[bool] = mapped_column(Boolean, default=True)  # показывать имя в рейтинге
+    rating_public: Mapped[bool] = mapped_column(Boolean, default=False)  # показывать имя в рейтинге (по умолчанию выкл)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     @property

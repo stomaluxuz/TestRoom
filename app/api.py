@@ -1026,6 +1026,11 @@ def create_app() -> FastAPI:
     async def my_mistakes(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
         return await svc.student_mistakes(db, user)
 
+    @app.get("/api/rating")
+    async def rating(scope: str = "group", user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+        """Рейтинг студента: scope=group (вуз+группа) или uni (весь вуз)."""
+        return await svc.rating_board(db, user, scope)
+
     # ------------------------------------------------ библиотека (чтение — все, загрузка — препод)
     @app.get("/api/library/subjects")
     async def library_subjects(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):

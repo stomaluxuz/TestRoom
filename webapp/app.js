@@ -23,6 +23,33 @@ function toast(msg) {
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), 2800);
 }
 function haptic(type) { try { tg && tg.HapticFeedback.notificationOccurred(type); } catch (e) {} }
+// Модальное окно (современное, скруглённое, выезжает снизу). actions: [{label, primary, onClick}].
+function showModal({ icon = "", title = "", text = "", actions = [] }) {
+  closeModal();
+  const wrap = document.createElement("div");
+  wrap.className = "modal-bg";
+  wrap.id = "modal-bg";
+  wrap.innerHTML = `
+    <div class="modal-card" role="dialog" aria-modal="true">
+      ${icon ? `<div class="modal-ic">${icon}</div>` : ""}
+      ${title ? `<div class="modal-ttl">${title}</div>` : ""}
+      ${text ? `<div class="modal-txt">${text}</div>` : ""}
+      <div class="modal-acts">
+        ${actions.map((a, i) => `<button class="btn ${a.primary ? "" : "secondary"}" data-ai="${i}">${a.label}</button>`).join("")}
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  requestAnimationFrame(() => wrap.classList.add("on"));
+  wrap.addEventListener("click", e => { if (e.target === wrap) closeModal(); });
+  actions.forEach((a, i) => {
+    const btn = wrap.querySelector(`[data-ai="${i}"]`);
+    if (btn) btn.addEventListener("click", () => { if (a.close !== false) closeModal(); if (a.onClick) a.onClick(); });
+  });
+}
+function closeModal() {
+  const el = document.getElementById("modal-bg");
+  if (el) { el.classList.remove("on"); setTimeout(() => el.remove(), 180); }
+}
 function fmtTime(sec) {
   sec = Math.max(0, Math.floor(sec));
   const m = Math.floor(sec / 60), s = sec % 60;
@@ -64,6 +91,16 @@ const T = {
     rating_title: "Рейтинг", rating_visible: "Показывать меня в рейтинге",
     rating_hint: "Когда включено — другие видят ваше имя и место. Выключите, чтобы остаться анонимно: своё место видите только вы, баллы считаются всегда.",
     choose_vuz_student: "Выберите вуз и укажите номер группы для рейтинга.", save_vuz_group: "Сохранить",
+    rating_open: "Рейтинг", rating_sub: "Твоё место среди своих",
+    rating_group: "Моя группа", rating_uni: "Мой вуз",
+    rating_pts: "очк.", rating_tests_n: "тестов", anon: "Аноним",
+    rating_empty: "Пока пусто — пройдите тесты, и здесь появятся баллы.",
+    rating_need_group: "Укажите вуз и группу в профиле — тогда увидите рейтинг своей группы.",
+    rating_need_uni: "Укажите вуз в профиле, чтобы видеть рейтинг вуза.",
+    rating_your_place: "Твоё место", rating_fill: "Заполнить профиль",
+    rating_off_title: "Вы скрыты в рейтинге",
+    rating_off_text: "Сейчас вас не видно в таблице — вы участвуете анонимно. Хотите, чтобы одногруппники видели ваше имя и место? Включите показ в профиле.",
+    rating_enable_btn: "Включить в профиле", later_btn: "Позже",
     support: "🆘 Поддержка", support_hint: "Опишите проблему или вопрос — мы ответим в чате бота.",
     support_ph: "Ваше сообщение…", support_send: "Отправить", support_sent: "Отправлено ✅ Мы ответим в боте.",
     support_empty: "Напишите сообщение.",
@@ -180,6 +217,16 @@ const T = {
     rating_title: "Reyting", rating_visible: "Reytingda ko'rsatilsin",
     rating_hint: "Yoqilganda — boshqalar ismingiz va o'rningizni ko'radi. O'chirsangiz anonim qolasiz: o'rningizni faqat o'zingiz ko'rasiz, ballar baribir hisoblanadi.",
     choose_vuz_student: "Reyting uchun OTMni tanlang va guruh raqamini kiriting.", save_vuz_group: "Saqlash",
+    rating_open: "Reyting", rating_sub: "O'zingiznikilar orasida o'rningiz",
+    rating_group: "Mening guruhim", rating_uni: "Mening OTM",
+    rating_pts: "ball", rating_tests_n: "test", anon: "Anonim",
+    rating_empty: "Hozircha bo'sh — testlardan o'ting, ballar shu yerda paydo bo'ladi.",
+    rating_need_group: "Profilda OTM va guruhni ko'rsating — shunda guruh reytingini ko'rasiz.",
+    rating_need_uni: "OTM reytingini ko'rish uchun profilda OTMni ko'rsating.",
+    rating_your_place: "Sizning o'rningiz", rating_fill: "Profilni to'ldirish",
+    rating_off_title: "Siz reytingda yashirinsiz",
+    rating_off_text: "Hozir siz jadvalda ko'rinmaysiz — anonim qatnashyapsiz. Guruhdoshlaringiz ismingiz va o'rningizni ko'rishini xohlaysizmi? Profilda ko'rsatishni yoqing.",
+    rating_enable_btn: "Profilda yoqish", later_btn: "Keyinroq",
     support: "🆘 Yordam", support_hint: "Muammo yoki savolni yozing — bot chatida javob beramiz.",
     support_ph: "Xabaringiz…", support_send: "Yuborish", support_sent: "Yuborildi ✅ Botda javob beramiz.",
     support_empty: "Xabar yozing.",
@@ -296,6 +343,16 @@ const T = {
     rating_title: "Rating", rating_visible: "Show me in the rating",
     rating_hint: "When on, others see your name and rank. Turn it off to stay anonymous: only you see your rank, and points are counted either way.",
     choose_vuz_student: "Choose your university and enter your group number for the rating.", save_vuz_group: "Save",
+    rating_open: "Rating", rating_sub: "Your place among peers",
+    rating_group: "My group", rating_uni: "My university",
+    rating_pts: "pts", rating_tests_n: "tests", anon: "Anonymous",
+    rating_empty: "Empty for now — take some tests and points will show up here.",
+    rating_need_group: "Set your university and group in the profile to see the group rating.",
+    rating_need_uni: "Set your university in the profile to see the university rating.",
+    rating_your_place: "Your place", rating_fill: "Fill in profile",
+    rating_off_title: "You are hidden in the rating",
+    rating_off_text: "You're not shown in the table right now — you take part anonymously. Want classmates to see your name and rank? Turn on visibility in your profile.",
+    rating_enable_btn: "Enable in profile", later_btn: "Later",
     support: "🆘 Support", support_hint: "Describe your problem or question — we'll reply in the bot chat.",
     support_ph: "Your message…", support_send: "Send", support_sent: "Sent ✅ We'll reply in the bot.",
     support_empty: "Write a message.",
@@ -1144,6 +1201,7 @@ const ICONS = {
   spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8L21.5 17l-1.8.7L19 19.5l-.7-1.8L16.5 17l1.8-.3z"/>',
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>',
 };
 function svgIcon(name) {
   const p = ICONS[name] || ICONS.book;
@@ -1189,6 +1247,7 @@ async function studentHome() {
       ${gcard("mytests", "book", t("my_tests_training"), t("sub_open_tests"), "violet")}
       ${gcard("upload", "upload", t("upload_my_test"), t("sub_upload"), "orange")}
       ${ME.song_enabled ? gcard("song", "music", songT().title.replace("🎵 ", ""), pr.song ? fmtSum(pr.song) + " сум" : "", "pink") : ""}
+      ${gcard("rating", "trophy", t("rating_open"), t("rating_sub"), "amber")}
       ${gcard("mistakes", "repeat", t("mistakes_title"), t("sub_mistakes"), "red")}
       ${gcard("results", "chart", t("results_title"), t("sub_history"), "emerald")}
       ${ME.teacher_pending ? "" : gcardWide("torole", "cap", t("become_teacher"), t("sub_apply"), "teal")}
@@ -1209,6 +1268,7 @@ async function studentHome() {
   on("#upload", "click", () => go(uploadScreen));
   on("#torole", "click", () => go(universityPickerScreen));
   on("#results", "click", () => go(studentResultsScreen));
+  on("#rating", "click", () => go(ratingScreen));
   on("#mistakes", "click", () => go(mistakesScreen));
   on("#courses", "click", () => go(coursesScreen));
   on("#topup", "click", () => { toast("Откройте чат бота и нажмите «💳 Пополнить баланс»"); try { tg && tg.close(); } catch (e) {} });
@@ -1239,6 +1299,72 @@ async function studentResultsScreen() {
     try { go(attemptScreen, { state: await api(`/api/student/attempts/${el2.dataset.id}`) }); }
     catch (e) { toast(e.message); }
   });
+}
+
+// Рейтинг студента: «Моя группа» / «Мой вуз». Скрытые — «Аноним», себя видно всегда.
+async function ratingScreen(params = {}) {
+  const scope = params.scope === "uni" ? "uni" : "group";
+  render(`
+    ${langBar()}
+    <h1>🏆 ${t("rating_open")}</h1>
+    <div class="tabs">
+      <button class="${scope === "group" ? "on" : ""}" id="t-grp">${t("rating_group")}</button>
+      <button class="${scope === "uni" ? "on" : ""}" id="t-uni">${t("rating_uni")}</button>
+    </div>
+    <div id="rbody" class="muted small">${t("loading")}</div>
+  `);
+  on("#t-grp", "click", () => go(ratingScreen, { scope: "group" }, true));
+  on("#t-uni", "click", () => go(ratingScreen, { scope: "uni" }, true));
+  let data;
+  try { data = await api(`/api/rating?scope=${scope}`); } catch (e) { return toast(e.message); }
+  const body = document.getElementById("rbody");
+  if (!body) return;
+  body.className = "";
+
+  if (!data.available) {
+    body.innerHTML = `
+      <div class="card" style="text-align:center">
+        <div class="modal-ic" style="margin:0 auto 10px">${svgIcon("trophy")}</div>
+        <p class="muted" style="margin:0 0 12px">${data.need === "uni" ? t("rating_need_uni") : t("rating_need_group")}</p>
+        <button class="btn" id="fill">${t("rating_fill")}</button>
+      </div>`;
+    on("#fill", "click", () => go(studentProfileScreen));
+    return;
+  }
+
+  // всплывающее окно, если студент скрыт в рейтинге
+  if (!data.rating_public) {
+    showModal({
+      icon: "🙈", title: t("rating_off_title"), text: t("rating_off_text"),
+      actions: [
+        { label: t("rating_enable_btn"), primary: true, onClick: () => go(studentProfileScreen) },
+        { label: t("later_btn") },
+      ],
+    });
+  }
+
+  const testsWord = n => LANG === "ru"
+    ? (n % 10 === 1 && n % 100 !== 11 ? "тест" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "теста" : "тестов"))
+    : LANG === "en" ? (n === 1 ? "test" : "tests") : "test";
+  const medal = r => r === 1 ? "🥇" : r === 2 ? "🥈" : r === 3 ? "🥉" : `<span class="rnum">${r}</span>`;
+  const rowHtml = r => `
+    <div class="rrow${r.is_me ? " me" : ""}">
+      <div class="rmed">${medal(r.rank)}</div>
+      <div class="grow"><div class="ell">${esc(r.name)}${r.is_me && r.hidden ? ` <span class="muted small">(${t("anon").toLowerCase()})</span>` : ""}</div>
+        <div class="muted small">${r.tests} ${testsWord(r.tests)}</div></div>
+      <div class="rpts">${r.points} <span>${t("rating_pts")}</span></div>
+    </div>`;
+
+  const hasScores = data.top.some(r => r.points > 0);
+  body.innerHTML = data.top.length && hasScores
+    ? `<div class="rlist">${data.top.map(rowHtml).join("")}</div>`
+    : `<div class="card muted" style="text-align:center">${t("rating_empty")}</div>`;
+
+  // «Твоё место» — закреплённая строка, если себя нет в видимом топе
+  if (data.me && !data.top.some(r => r.is_me)) {
+    body.insertAdjacentHTML("beforeend",
+      `<div class="muted small" style="margin:12px 0 4px">${t("rating_your_place")}</div><div class="rlist">${rowHtml(data.me)}</div>`);
+  }
 }
 
 // «Мои ошибки» — разбор неверно отвеченных вопросов

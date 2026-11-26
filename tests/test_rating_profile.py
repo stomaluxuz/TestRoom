@@ -21,11 +21,11 @@ async def client():
 
 
 async def test_defaults(client):
-    """Новый пользователь: вуз/группа пустые, в рейтинге виден по умолчанию."""
+    """Новый пользователь: вуз/группа пустые, в рейтинге скрыт по умолчанию (opt-in)."""
     me = (await client.get("/api/me", headers=headers(600))).json()
     assert me["university"] is None
     assert me["study_group"] is None
-    assert me["rating_public"] is True
+    assert me["rating_public"] is False
 
 
 async def test_set_university_and_group(client):

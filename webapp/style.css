@@ -179,6 +179,29 @@ label { display: block; margin-top: 12px; font-size: 13px; color: var(--hint); }
 .switch .slider::before { content: ""; position: absolute; height: 22px; width: 22px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .switch input:checked + .slider { background: var(--brand); }
 .switch input:checked + .slider::before { transform: translateX(18px); }
+/* Модальное окно */
+.modal-bg { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(20,22,28,.45); backdrop-filter: blur(3px); opacity: 0; transition: opacity .18s ease; padding: 12px; }
+.modal-bg.on { opacity: 1; }
+.modal-card { width: 100%; max-width: 440px; background: var(--bg); border-radius: 26px; padding: 24px 22px 18px;
+  box-shadow: 0 -4px 40px rgba(0,0,0,.2); transform: translateY(24px); transition: transform .22s cubic-bezier(.2,.8,.2,1); text-align: center; }
+.modal-bg.on .modal-card { transform: translateY(0); }
+.modal-ic { width: 60px; height: 60px; margin: 0 auto 12px; border-radius: 18px; display: flex; align-items: center; justify-content: center;
+  font-size: 30px; background: var(--brand-soft); color: var(--brand); }
+.modal-ic svg { width: 32px; height: 32px; }
+.modal-ttl { font-size: 19px; font-weight: 700; margin-bottom: 6px; }
+.modal-txt { color: var(--hint); font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
+.modal-acts { display: flex; flex-direction: column; gap: 8px; }
+.modal-acts .btn { margin: 0; }
+@media (min-width: 480px) { .modal-bg { align-items: center; } }
+/* Таблица рейтинга */
+.rlist { display: flex; flex-direction: column; gap: 8px; }
+.rrow { display: flex; align-items: center; gap: 12px; background: var(--bg); border-radius: 16px; padding: 12px 14px; box-shadow: var(--card-shadow); }
+.rrow.me { background: var(--brand-soft); box-shadow: 0 0 0 1.5px var(--brand) inset; }
+.rmed { width: 30px; text-align: center; font-size: 20px; flex: none; }
+.rmed .rnum { font-size: 15px; font-weight: 700; color: var(--hint); }
+.rpts { font-weight: 700; color: var(--brand); white-space: nowrap; }
+.rpts span { font-size: 11px; font-weight: 600; color: var(--hint); }
 .actbar.hidden { display: none; }
 .credit { width: 100%; margin: 0 auto; padding: 10px 14px 30px; text-align: center;
   color: var(--hint); font-size: 13px; display: none; }
