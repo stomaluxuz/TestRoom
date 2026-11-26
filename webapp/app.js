@@ -92,8 +92,8 @@ const T = {
     rating_hint: "Когда включено — другие видят ваше имя и место. Выключите, чтобы остаться анонимно: своё место видите только вы, баллы считаются всегда.",
     choose_vuz_student: "Выберите вуз и укажите номер группы для рейтинга.", save_vuz_group: "Сохранить",
     vuz_not_chosen: "Вуз не выбран", pick_vuz_list: "Выберите вуз из списка.",
-    studrating: "Успеваемость", studrating_sub: "Кто как учится",
-    how_study: "Как учатся студенты", no_rating_groups: "Проведите тесты — здесь появится успеваемость студентов.",
+    studrating: "Рейтинг", studrating_sub: "Общий и по группам", rating_all: "Общий",
+    how_study: "Рейтинг", no_rating_groups: "Проведите тесты — здесь появится успеваемость студентов.",
     rating_open: "Рейтинг", rating_sub: "Твоё место среди своих",
     rating_group: "Моя группа", rating_uni: "Мой вуз",
     rating_pts: "очк.", rating_tests_n: "тестов", anon: "Аноним",
@@ -221,8 +221,8 @@ const T = {
     rating_hint: "Yoqilganda — boshqalar ismingiz va o'rningizni ko'radi. O'chirsangiz anonim qolasiz: o'rningizni faqat o'zingiz ko'rasiz, ballar baribir hisoblanadi.",
     choose_vuz_student: "Reyting uchun OTMni tanlang va guruh raqamini kiriting.", save_vuz_group: "Saqlash",
     vuz_not_chosen: "OTM tanlanmagan", pick_vuz_list: "OTMni ro'yxatdan tanlang.",
-    studrating: "O'zlashtirish", studrating_sub: "Kim qanday o'qiyapti",
-    how_study: "Talabalar qanday o'qiyapti", no_rating_groups: "Testlar o'tkazing — bu yerda talabalar o'zlashtirishi paydo bo'ladi.",
+    studrating: "Reyting", studrating_sub: "Umumiy va guruhlar bo'yicha", rating_all: "Umumiy",
+    how_study: "Reyting", no_rating_groups: "Testlar o'tkazing — bu yerda talabalar o'zlashtirishi paydo bo'ladi.",
     rating_open: "Reyting", rating_sub: "O'zingiznikilar orasida o'rningiz",
     rating_group: "Mening guruhim", rating_uni: "Mening OTM",
     rating_pts: "ball", rating_tests_n: "test", anon: "Anonim",
@@ -350,8 +350,8 @@ const T = {
     rating_hint: "When on, others see your name and rank. Turn it off to stay anonymous: only you see your rank, and points are counted either way.",
     choose_vuz_student: "Choose your university and enter your group number for the rating.", save_vuz_group: "Save",
     vuz_not_chosen: "No university chosen", pick_vuz_list: "Choose a university from the list.",
-    studrating: "Performance", studrating_sub: "Who studies how",
-    how_study: "How students are doing", no_rating_groups: "Run some tests — student performance will show up here.",
+    studrating: "Rating", studrating_sub: "Overall and by group", rating_all: "Overall",
+    how_study: "Rating", no_rating_groups: "Run some tests — student performance will show up here.",
     rating_open: "Rating", rating_sub: "Your place among peers",
     rating_group: "My group", rating_uni: "My university",
     rating_pts: "pts", rating_tests_n: "tests", anon: "Anonymous",
@@ -1386,7 +1386,7 @@ async function ratingScreen(params = {}) {
 
 // Преподаватель: «Как учатся студенты» — выбор группы и успеваемость по его тестам.
 async function teacherRatingScreen(params = {}) {
-  render(`${langBar()}<h1>📈 ${t("how_study")}</h1><div id="rtop"></div><div id="rbody" class="muted small">${t("loading")}</div>`);
+  render(`${langBar()}<h1>🏆 ${t("how_study")}</h1><div id="rtop"></div><div id="rbody" class="muted small">${t("loading")}</div>`);
   let groups;
   try { groups = await api("/api/teacher/rating/groups"); } catch (e) { return toast(e.message); }
   if (!groups.length) {
@@ -1394,10 +1394,13 @@ async function teacherRatingScreen(params = {}) {
     document.getElementById("rbody").innerHTML = `<div class="card muted" style="text-align:center">${t("no_rating_groups")}</div>`;
     return;
   }
-  const cur = groups.includes(params.group) ? params.group : groups[0];
+  const cur = (params.group && groups.includes(params.group)) ? params.group : "";  // "" — общий рейтинг
   document.getElementById("rtop").innerHTML = `
     <label>${t("group")}</label>
-    <select id="grpsel">${groups.map(g => `<option value="${esc(g)}" ${g === cur ? "selected" : ""}>${esc(g)}</option>`).join("")}</select>`;
+    <select id="grpsel">
+      <option value="" ${cur === "" ? "selected" : ""}>${t("rating_all")}</option>
+      ${groups.map(g => `<option value="${esc(g)}" ${g === cur ? "selected" : ""}>${esc(g)}</option>`).join("")}
+    </select>`;
   document.getElementById("grpsel").addEventListener("change", e => go(teacherRatingScreen, { group: e.target.value }, true));
   await loadGroup(cur);
 

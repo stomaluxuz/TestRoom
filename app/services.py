@@ -1391,22 +1391,24 @@ async def teacher_rating_groups(db: AsyncSession, teacher: User) -> list[str]:
     return sorted(groups, key=lambda s: s.casefold())
 
 
-async def teacher_group_rating(db: AsyncSession, teacher: User, group: str) -> dict:
-    """Успеваемость студентов одной группы по тестам этого преподавателя.
+async def teacher_group_rating(db: AsyncSession, teacher: User, group: str = "") -> dict:
+    """Успеваемость студентов по тестам этого преподавателя. Пустая group — ОБЩИЙ рейтинг
+    (все группы вместе); иначе — только выбранная группа.
     Настоящие имена (переключатель приватности студента на преподавателя не влияет),
     первая зачётная попытка по каждому тесту, сортировка по среднему проценту."""
     require_teacher(teacher)
     group = (group or "").strip()
-    if not group:
-        return {"group": group, "rows": []}
-    rows = (await db.execute(
+    q = (
         select(Attempt.user_id, TestSession.test_id, Attempt.correct_count,
                Attempt.question_order, Attempt.full_name, Attempt.started_at)
         .join(TestSession, TestSession.id == Attempt.session_id)
-        .where(TestSession.teacher_id == teacher.id, TestSession.group_name == group,
+        .where(TestSession.teacher_id == teacher.id,
                TestSession.solo.is_(False), Attempt.finished_at.is_not(None))
         .order_by(Attempt.started_at.asc())
-    )).all()
+    )
+    if group:  # конкретная группа; пусто — общий рейтинг по всем группам
+        q = q.where(TestSession.group_name == group)
+    rows = (await db.execute(q)).all()
     first: dict[tuple[int, int], tuple[int, int, str]] = {}  # (user,test) -> (верно, всего, имя)
     for uid, test_id, correct, qorder, name, _started in rows:
         key = (uid, test_id)

@@ -147,3 +147,33 @@ async def test_teacher_sees_only_own_sessions():
         # наш преподаватель тестов не проводил → ни групп, ни строк
         assert await svc.teacher_rating_groups(db, teacher) == []
         assert (await svc.teacher_group_rating(db, teacher, "101"))["rows"] == []
+
+
+async def _session_g(db, teacher_id, group):
+    subj = Subject(teacher_id=teacher_id, name="Анат"); db.add(subj); await db.flush()
+    test = _TestM(teacher_id=teacher_id, subject_id=subj.id, title="Т"); db.add(test); await db.flush()
+    s = Session(test_id=test.id, teacher_id=teacher_id, group_name=group, code="000001",
+                duration_min=10, question_count=10, solo=False, ends_at=utcnow() + timedelta(hours=1))
+    db.add(s); await db.flush()
+    return s
+
+
+async def test_teacher_overall_rating_across_groups():
+    async with dbmod.SessionLocal() as db:
+        teacher = await svc.get_or_create_user(db, 1)
+        a = await _student(db, 300, "Алиса", "ТГСИ", "101", True)
+        b = await _student(db, 301, "Борис", "ТГСИ", "202", True)
+        s101 = await _session_g(db, teacher.id, "101")
+        s202 = await _session_g(db, teacher.id, "202")
+        await _attempt(db, s101.id, a.id, "Алиса", 2)   # 100% в группе 101
+        await _attempt(db, s202.id, b.id, "Борис", 1)   # 50% в группе 202
+        await db.commit()
+
+        assert set(await svc.teacher_rating_groups(db, teacher)) == {"101", "202"}
+        # общий (group="") — обе группы вместе
+        overall = (await svc.teacher_group_rating(db, teacher, ""))["rows"]
+        assert {r["name"] for r in overall} == {"Алиса", "Борис"}
+        assert overall[0]["name"] == "Алиса" and overall[0]["avg"] == 100
+        # по группе 202 — только Борис
+        g202 = (await svc.teacher_group_rating(db, teacher, "202"))["rows"]
+        assert [r["name"] for r in g202] == ["Борис"]
