@@ -885,3 +885,12 @@ async def test_admin_daily_stats_tests_and_sessions(db):
 async def test_admin_daily_stats_bad_metric(db):
     with pytest.raises(svc.ServiceError):
         await svc.admin_daily_stats(db, "nope")
+
+
+async def test_reorder_library_subjects(db):
+    a = await svc.add_library_subject(db, "Предмет А")
+    b = await svc.add_library_subject(db, "Предмет Б")
+    c = await svc.add_library_subject(db, "Предмет В")
+    await svc.reorder_library_subjects(db, [c.id, a.id, b.id])  # хотим В, А, Б
+    names = [s["name"] for s in await svc.list_library_subjects(db)]
+    assert names[:3] == ["Предмет В", "Предмет А", "Предмет Б"]

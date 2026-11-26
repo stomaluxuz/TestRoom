@@ -1928,6 +1928,23 @@ async def delete_library_subject(db: AsyncSession, subject_id: int):
     await db.commit()
 
 
+async def reorder_library_subjects(db: AsyncSession, ids: list[int]) -> None:
+    """Задать порядок предметов: position = индекс в присланном списке (неизвестные id игнорируем)."""
+    existing = {s.id: s for s in await db.scalars(select(LibrarySubject))}
+    pos = 0
+    for sid in ids:
+        s = existing.get(int(sid))
+        if s is not None:
+            s.position = pos
+            pos += 1
+    # предметы, которых не было в списке, — в конец (сохраняя относительный порядок)
+    for s in sorted((x for x in existing.values() if x.id not in set(int(i) for i in ids)),
+                    key=lambda x: (x.position, x.name)):
+        s.position = pos
+        pos += 1
+    await db.commit()
+
+
 import os as _os
 # Крупнее этого — текст не извлекаем (pypdf читает постранично, но PdfReader всё же держит
 # структуру файла в памяти; на 1 ГБ VPS разумный потолок). Настраивается LIBRARY_EXTRACT_MAX_MB.

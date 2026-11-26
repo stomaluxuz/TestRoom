@@ -2212,13 +2212,25 @@ async function libraryTab(body) {
   }
   function renderSubs(list) {
     const el = document.getElementById("subs");
-    el.innerHTML = list.map(s => `
+    el.innerHTML = list.map((s, i) => `
       <div class="row sub" data-id="${s.id}" style="align-items:center">
+        <button class="mini" data-up="${s.id}" ${i === 0 ? "disabled" : ""}>⬆️</button>
+        <button class="mini" data-down="${s.id}" ${i === list.length - 1 ? "disabled" : ""}>⬇️</button>
         <span class="grow">${esc(s.name)} <span class="muted small">(${s.docs})</span></span>
         <button class="mini" data-ren="${s.id}">✏️</button><button class="mini no" data-del="${s.id}">🗑</button>
       </div>`).join("");
     onAll("[data-ren]", "click", e => ren(e.dataset.ren, list));
     onAll("[data-del]", "click", e => del(e.dataset.del));
+    onAll("[data-up]", "click", e => moveSub(list, +e.dataset.up, -1));
+    onAll("[data-down]", "click", e => moveSub(list, +e.dataset.down, 1));
+  }
+  function moveSub(list, id, dir) {
+    const i = list.findIndex(s => s.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    renderSubs(list);
+    haptic("success");
+    api("/api/admin/library/subjects/reorder", { json: { ids: list.map(s => s.id) } }).catch(e => toast(e.message));
   }
   async function reloadSubs() { subjects = await api("/api/library/subjects"); renderSubs(subjects); }
   async function ren(id, list) {
