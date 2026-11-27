@@ -505,3 +505,11 @@ body { background:
 .rc-b { flex: 1; height: 60px; border: 0; border-radius: 16px; background: var(--bg); color: var(--brand);
   font-size: 26px; box-shadow: var(--card-shadow); cursor: pointer; user-select: none; touch-action: none; }
 .rc-b:active { background: var(--brand-soft); transform: scale(.97); }
+
+/* ===== Тетрис ===== */
+.tt-stage { position: relative; display: flex; justify-content: center; }
+#tt { border-radius: 14px; display: block; touch-action: none; box-shadow: var(--card-shadow); }
+.tt-ctl { display: flex; gap: 10px; margin-top: 16px; }
+.tt-b { flex: 1; height: 58px; border: 0; border-radius: 15px; background: var(--bg); color: var(--brand);
+  font-size: 24px; box-shadow: var(--card-shadow); cursor: pointer; user-select: none; touch-action: none; }
+.tt-b:active { background: var(--brand-soft); transform: scale(.96); }

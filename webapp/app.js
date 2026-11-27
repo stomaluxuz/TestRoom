@@ -3063,6 +3063,7 @@ const QUIZ = {
     snake_name: "Змейка", snake_desc: "Классика на перемену: собирай яблоки, не влетай в стену и в себя",
     fight_name: "Файтинг", fight_desc: "Выбери бойца и дерись с компьютером: удары, блок, спецудар, KO",
     race_name: "Гонка", race_desc: "Уворачивайся от встречных машин, обгоняй, разгоняйся — ставь рекорд",
+    tetris_name: "Тетрис", tetris_desc: "Складывай фигуры, собирай линии, не дай стакану заполниться",
     soon: "Скоро", in_dev: "В разработке — скоро добавим! 🔧",
   },
   uz: {
@@ -3087,6 +3088,7 @@ const QUIZ = {
     snake_name: "Ilon", snake_desc: "Tanaffusga klassika: olma yig', devorga va o'zingga urilma",
     fight_name: "Jang", fight_desc: "Jangchi tanla va kompyuter bilan jang qil: zarba, blok, super zarba, KO",
     race_name: "Poyga", race_desc: "Qarshi mashinalardan qoch, o'zib ket, tezlash — rekord qo'y",
+    tetris_name: "Tetris", tetris_desc: "Figuralarni jipsla, qatorlar yig', stakan to'lib ketmasin",
     soon: "Tez orada", in_dev: "Ishlanmoqda — tez orada qo'shamiz! 🔧",
   },
   en: {
@@ -3111,6 +3113,7 @@ const QUIZ = {
     snake_name: "Snake", snake_desc: "Classic break-time game: eat apples, don't hit walls or yourself",
     fight_name: "Fighter", fight_desc: "Pick a fighter and battle the computer: punch, kick, block, special, KO",
     race_name: "Race", race_desc: "Dodge oncoming cars, overtake, speed up — set a high score",
+    tetris_name: "Tetris", tetris_desc: "Stack the pieces, clear lines, don't let the stack reach the top",
     soon: "Soon", in_dev: "In development — coming soon! 🔧",
   },
 };
@@ -3152,6 +3155,7 @@ function gamesScreen() {
     ${tile("snake", "🐍", Q.snake_name, Q.snake_desc, true)}
     ${tile("fight", "🥊", Q.fight_name, Q.fight_desc, true)}
     ${tile("race", "🏎", Q.race_name, Q.race_desc, true)}
+    ${tile("tetris", "🧱", Q.tetris_name, Q.tetris_desc, true)}
   `);
   showTabs("games");
   on("#g-quiz", "click", () => go(isHost ? quizCreateScreen : quizJoinScreen));
@@ -3159,6 +3163,7 @@ function gamesScreen() {
   on("#g-snake", "click", () => go(snakeScreen));
   on("#g-fight", "click", () => go(fightSelectScreen));
   on("#g-race", "click", () => go(raceScreen));
+  on("#g-tetris", "click", () => go(tetrisScreen));
 }
 
 // ---- заглушка игры «в разработке»
@@ -3332,6 +3337,157 @@ function snakeScreen() {
     else { restartLoop(); document.getElementById("sk-pause").textContent = "⏸"; }
   });
   reset();
+}
+
+// ---- Тетрис: классика (canvas, без сервера; рекорд — локально)
+function tetrisScreen() {
+  const T = ({
+    ru: { title: "Тетрис", score: "Счёт", best: "Рекорд", lvl: "Ур.", start: "◀ ▶ двигай · ↻ поворот · ⬇ вниз", go: "▶️ Старт", again: "🔄 Заново", over: "Игра окончена" },
+    uz: { title: "Tetris", score: "Hisob", best: "Rekord", lvl: "Dr.", start: "◀ ▶ suring · ↻ burish · ⬇ past", go: "▶️ Start", again: "🔄 Qayta", over: "O'yin tugadi" },
+    en: { title: "Tetris", score: "Score", best: "Best", lvl: "Lv.", start: "◀ ▶ move · ↻ rotate · ⬇ down", go: "▶️ Start", again: "🔄 Restart", over: "Game over" },
+  })[LANG] || { title: "Тетрис", score: "Счёт", best: "Рекорд", lvl: "Ур.", start: "◀ ▶ двигай · ↻ поворот · ⬇ вниз", go: "▶️ Старт", again: "🔄 Заново", over: "Игра окончена" };
+  const COLS = 10, ROWS = 20;
+  const PIECES = {
+    I: { c: "#38bdf8", m: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]] },
+    O: { c: "#fbbf24", m: [[1, 1], [1, 1]] },
+    T: { c: "#a855f7", m: [[0, 1, 0], [1, 1, 1], [0, 0, 0]] },
+    S: { c: "#22c55e", m: [[0, 1, 1], [1, 1, 0], [0, 0, 0]] },
+    Z: { c: "#ef4444", m: [[1, 1, 0], [0, 1, 1], [0, 0, 0]] },
+    J: { c: "#3b82f6", m: [[1, 0, 0], [1, 1, 1], [0, 0, 0]] },
+    L: { c: "#f97316", m: [[0, 0, 1], [1, 1, 1], [0, 0, 0]] },
+  };
+  const KEYS = Object.keys(PIECES);
+  let best = 0; try { best = +localStorage.getItem("tetris_best") || 0; } catch (e) {}
+  render(`
+    ${langBar()}
+    <h1>🧱 ${T.title}</h1>
+    <div class="sk-top">
+      <span class="sk-chip">${T.score}: <b id="tt-score">0</b></span>
+      <span class="sk-chip">${T.best}: <b id="tt-best">${best}</b></span>
+      <span class="sk-chip">${T.lvl} <b id="tt-lvl">1</b></span>
+    </div>
+    <div class="tt-stage">
+      <canvas id="tt"></canvas>
+      <div class="sk-over on" id="tt-over">
+        <div class="sk-over-t" id="tt-msg">${T.start}</div>
+        <div class="sk-over-s" id="tt-sub"></div>
+        <button class="btn" id="tt-go">${T.go}</button>
+      </div>
+    </div>
+    <div class="tt-ctl">
+      <button class="tt-b" data-k="left">◀</button>
+      <button class="tt-b" data-k="rot">↻</button>
+      <button class="tt-b" data-k="right">▶</button>
+      <button class="tt-b" data-k="down">⬇</button>
+    </div>
+  `);
+  showTabs("games");
+  const cv = document.getElementById("tt"), ctx = cv.getContext("2d");
+  const availCss = Math.min((cv.parentElement && cv.parentElement.clientWidth) || 300, 340);
+  const boardHcss = Math.min(Math.round(availCss * 1.5), 470);
+  const DPR = window.devicePixelRatio || 1;
+  const cellCss = Math.floor(boardHcss / ROWS), bwCss = cellCss * COLS, bhCss = cellCss * ROWS;
+  cv.style.width = bwCss + "px"; cv.style.height = bhCss + "px";
+  cv.width = Math.round(bwCss * DPR); cv.height = Math.round(bhCss * DPR);
+  const cell = cellCss * DPR, W = cv.width, H = cv.height;
+  const css = getComputedStyle(document.documentElement), CC = n => (css.getPropertyValue(n) || "").trim();
+  const boardBg = CC("--bg") || "#fff", grid = CC("--bg2") || "#eee";
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); ctx.fill(); };
+  let board, cur, nextKey, score, lines, level, dropAcc, moveAcc, over, playing, loop = null;
+  const held = { left: false, right: false, down: false };
+
+  const rot = m => m[0].map((_, i) => m.map(row => row[i]).reverse());
+  function collide(m, x, y) {
+    for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) if (m[r][c]) {
+      const bx = x + c, by = y + r;
+      if (bx < 0 || bx >= COLS || by >= ROWS) return true;
+      if (by >= 0 && board[by][bx]) return true;
+    }
+    return false;
+  }
+  function spawn() {
+    const k = nextKey || KEYS[(Math.random() * KEYS.length) | 0];
+    nextKey = KEYS[(Math.random() * KEYS.length) | 0];
+    const m = PIECES[k].m.map(r => r.slice());
+    cur = { k, m, c: PIECES[k].c, x: ((COLS - m[0].length) / 2) | 0, y: -1 };
+    if (collide(cur.m, cur.x, cur.y + 1)) gameOver();
+  }
+  function tryMove(dx, dy) { if (!collide(cur.m, cur.x + dx, cur.y + dy)) { cur.x += dx; cur.y += dy; return true; } return false; }
+  function doRotate() {
+    const rm = rot(cur.m);
+    for (const k of [0, -1, 1, -2, 2]) if (!collide(rm, cur.x + k, cur.y)) { cur.m = rm; cur.x += k; haptic("light"); return; }
+  }
+  function lock() {
+    for (let r = 0; r < cur.m.length; r++) for (let c = 0; c < cur.m[r].length; c++) if (cur.m[r][c]) {
+      const by = cur.y + r; if (by < 0) { gameOver(); return; } board[by][cur.x + c] = cur.c;
+    }
+    let cleared = 0;
+    for (let r = ROWS - 1; r >= 0; r--) if (board[r].every(v => v)) { board.splice(r, 1); board.unshift(new Array(COLS).fill(0)); cleared++; r++; }
+    if (cleared) {
+      score += [0, 100, 300, 500, 800][cleared] * level; lines += cleared; level = 1 + ((lines / 10) | 0);
+      document.getElementById("tt-score").textContent = score;
+      document.getElementById("tt-lvl").textContent = level;
+      haptic("success");
+    }
+    spawn();
+  }
+  function step() {
+    moveAcc -= 50;
+    if ((held.left || held.right) && moveAcc <= 0) { tryMove(held.right ? 1 : -1, 0); moveAcc = 110; }
+    dropAcc += 50 * (held.down ? 7 : 1);
+    const interval = Math.max(90, 620 - (level - 1) * 55);
+    if (dropAcc >= interval) { dropAcc = 0; if (!tryMove(0, 1)) lock(); if (held.down) score++; }
+    draw();
+  }
+  function blockAt(gx, gy, col) {
+    const x = gx * cell, y = gy * cell;
+    ctx.fillStyle = col; rr(x + DPR, y + DPR, cell - 2 * DPR, cell - 2 * DPR, cell * 0.18);
+    ctx.fillStyle = "rgba(255,255,255,.28)"; rr(x + DPR, y + DPR, cell - 2 * DPR, cell * 0.3, cell * 0.18);
+  }
+  function draw() {
+    ctx.fillStyle = boardBg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = grid; ctx.lineWidth = Math.max(1, DPR * 0.5);
+    for (let c = 1; c < COLS; c++) { ctx.beginPath(); ctx.moveTo(c * cell, 0); ctx.lineTo(c * cell, H); ctx.stroke(); }
+    for (let r = 1; r < ROWS; r++) { ctx.beginPath(); ctx.moveTo(0, r * cell); ctx.lineTo(W, r * cell); ctx.stroke(); }
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (board[r][c]) blockAt(c, r, board[r][c]);
+    if (cur) {
+      let gy = cur.y; while (!collide(cur.m, cur.x, gy + 1)) gy++;  // призрак
+      for (let r = 0; r < cur.m.length; r++) for (let c = 0; c < cur.m[r].length; c++) if (cur.m[r][c] && gy + r >= 0) {
+        ctx.globalAlpha = 0.22; ctx.fillStyle = cur.c; rr((cur.x + c) * cell + DPR, (gy + r) * cell + DPR, cell - 2 * DPR, cell - 2 * DPR, cell * 0.18); ctx.globalAlpha = 1;
+      }
+      for (let r = 0; r < cur.m.length; r++) for (let c = 0; c < cur.m[r].length; c++) if (cur.m[r][c] && cur.y + r >= 0) blockAt(cur.x + c, cur.y + r, cur.c);
+    }
+  }
+  function startGame() {
+    board = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
+    score = 0; lines = 0; level = 1; dropAcc = 0; moveAcc = 0; over = false; playing = true; nextKey = null;
+    document.getElementById("tt-score").textContent = "0"; document.getElementById("tt-lvl").textContent = "1";
+    document.getElementById("tt-over").classList.remove("on");
+    spawn();
+    if (loop) clearInterval(loop); loop = setInterval(step, 50); timers.push(loop);
+  }
+  function gameOver() {
+    if (over) return; over = true; playing = false;
+    if (loop) clearInterval(loop); loop = null; haptic("error");
+    if (score > best) { best = score; try { localStorage.setItem("tetris_best", best); } catch (e) {}
+      document.getElementById("tt-best").textContent = best; }
+    document.getElementById("tt-msg").textContent = T.over;
+    document.getElementById("tt-sub").textContent = `${T.score}: ${score} · ${T.best}: ${best}`;
+    document.getElementById("tt-go").textContent = T.again;
+    document.getElementById("tt-over").classList.add("on");
+  }
+  $app.querySelectorAll(".tt-b").forEach(btn => {
+    const k = btn.dataset.k;
+    const dn = e => { e.preventDefault(); if (!playing) return;
+      if (k === "rot") doRotate();
+      else if (k === "down") held.down = true;
+      else { held[k] = true; tryMove(k === "right" ? 1 : -1, 0); moveAcc = 180; } };
+    const up = e => { e.preventDefault(); if (k === "left" || k === "right" || k === "down") held[k] = false; };
+    btn.addEventListener("pointerdown", dn); btn.addEventListener("pointerup", up);
+    btn.addEventListener("pointerleave", up); btn.addEventListener("pointercancel", up);
+  });
+  on("#tt-go", "click", startGame);
+  board = Array.from({ length: ROWS }, () => new Array(COLS).fill(0)); cur = null; draw();
 }
 
 // ---- Гонка: аркадный уворот от машин (canvas, без сервера; рекорд — локально)
