@@ -3333,7 +3333,7 @@ function snakeScreen() {
 const FIGHTERS = {
   tooth: { emoji: "🦷", color: "#cde0ec", ru: "Зуб", uz: "Tish", en: "Tooth" },
   lungs: { emoji: "🫁", color: "#f2aab3", ru: "Лёгкие", uz: "O'pka", en: "Lungs" },
-  heart: { emoji: "❤️", color: "#ff6b78", ru: "Сердце", uz: "Yurak", en: "Heart" },
+  heart: { emoji: "🫀", color: "#ff6b78", ru: "Сердце", uz: "Yurak", en: "Heart" },
   book: { emoji: "📚", color: "#6c93f0", ru: "Книга", uz: "Kitob", en: "Book" },
   brain: { emoji: "🧠", color: "#efa6c6", ru: "Мозг", uz: "Miya", en: "Brain" },
 };
