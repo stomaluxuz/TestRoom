@@ -3062,6 +3062,7 @@ const QUIZ = {
     mafia_name: "Мафия", mafia_desc: "Ролевая игра на логику: город против мафии",
     snake_name: "Змейка", snake_desc: "Классика на перемену: собирай яблоки, не влетай в стену и в себя",
     fight_name: "Файтинг", fight_desc: "Выбери бойца и дерись с компьютером: удары, блок, спецудар, KO",
+    race_name: "Гонка", race_desc: "Уворачивайся от встречных машин, обгоняй, разгоняйся — ставь рекорд",
     soon: "Скоро", in_dev: "В разработке — скоро добавим! 🔧",
   },
   uz: {
@@ -3085,6 +3086,7 @@ const QUIZ = {
     mafia_name: "Mafiya", mafia_desc: "Mantiqqa mo'ljallangan rolli o'yin: shahar mafiyaga qarshi",
     snake_name: "Ilon", snake_desc: "Tanaffusga klassika: olma yig', devorga va o'zingga urilma",
     fight_name: "Jang", fight_desc: "Jangchi tanla va kompyuter bilan jang qil: zarba, blok, super zarba, KO",
+    race_name: "Poyga", race_desc: "Qarshi mashinalardan qoch, o'zib ket, tezlash — rekord qo'y",
     soon: "Tez orada", in_dev: "Ishlanmoqda — tez orada qo'shamiz! 🔧",
   },
   en: {
@@ -3108,6 +3110,7 @@ const QUIZ = {
     mafia_name: "Mafia", mafia_desc: "Social deduction game: town vs. mafia",
     snake_name: "Snake", snake_desc: "Classic break-time game: eat apples, don't hit walls or yourself",
     fight_name: "Fighter", fight_desc: "Pick a fighter and battle the computer: punch, kick, block, special, KO",
+    race_name: "Race", race_desc: "Dodge oncoming cars, overtake, speed up — set a high score",
     soon: "Soon", in_dev: "In development — coming soon! 🔧",
   },
 };
@@ -3148,12 +3151,14 @@ function gamesScreen() {
     ${tile("mafia", "🕵️", Q.mafia_name, Q.mafia_desc, true)}
     ${tile("snake", "🐍", Q.snake_name, Q.snake_desc, true)}
     ${tile("fight", "🥊", Q.fight_name, Q.fight_desc, true)}
+    ${tile("race", "🏎", Q.race_name, Q.race_desc, true)}
   `);
   showTabs("games");
   on("#g-quiz", "click", () => go(isHost ? quizCreateScreen : quizJoinScreen));
   on("#g-mafia", "click", () => go(mafiaMenuScreen));
   on("#g-snake", "click", () => go(snakeScreen));
   on("#g-fight", "click", () => go(fightSelectScreen));
+  on("#g-race", "click", () => go(raceScreen));
 }
 
 // ---- заглушка игры «в разработке»
@@ -3326,6 +3331,119 @@ function snakeScreen() {
     if (paused) { if (loop) clearInterval(loop); loop = null; document.getElementById("sk-pause").textContent = "▶️"; }
     else { restartLoop(); document.getElementById("sk-pause").textContent = "⏸"; }
   });
+  reset();
+}
+
+// ---- Гонка: аркадный уворот от машин (canvas, без сервера; рекорд — локально)
+function raceScreen() {
+  const R = ({
+    ru: { title: "Гонка", score: "Счёт", best: "Рекорд", start: "Держи ◀ ▶ — уворачивайся от машин", go: "▶️ Старт", again: "🔄 Заново", over: "Авария!" },
+    uz: { title: "Poyga", score: "Hisob", best: "Rekord", start: "◀ ▶ bosib tur — mashinalardan qoch", go: "▶️ Start", again: "🔄 Qayta", over: "Avariya!" },
+    en: { title: "Race", score: "Score", best: "Best", start: "Hold ◀ ▶ — dodge the cars", go: "▶️ Start", again: "🔄 Restart", over: "Crash!" },
+  })[LANG] || { title: "Гонка", score: "Счёт", best: "Рекорд", start: "Держи ◀ ▶ — уворачивайся от машин", go: "▶️ Старт", again: "🔄 Заново", over: "Авария!" };
+  let best = 0; try { best = +localStorage.getItem("race_best") || 0; } catch (e) {}
+  render(`
+    ${langBar()}
+    <h1>🏎 ${R.title}</h1>
+    <div class="sk-top">
+      <span class="sk-chip">${R.score}: <b id="rc-score">0</b></span>
+      <span class="sk-chip">${R.best}: <b id="rc-best">${best}</b></span>
+    </div>
+    <div class="rc-stage">
+      <canvas id="rc"></canvas>
+      <div class="sk-over on" id="rc-over">
+        <div class="sk-over-t" id="rc-msg">${R.start}</div>
+        <div class="sk-over-s" id="rc-sub"></div>
+        <button class="btn" id="rc-go">${R.go}</button>
+      </div>
+    </div>
+    <div class="rc-ctl"><button class="rc-b" data-k="left">◀</button><button class="rc-b" data-k="right">▶</button></div>
+  `);
+  showTabs("games");
+  const cv = document.getElementById("rc"), ctx = cv.getContext("2d");
+  const avail = Math.min((cv.parentElement && cv.parentElement.clientWidth) || 320, 380);
+  const Hpx = Math.min(Math.round(avail * 1.4), 540), DPR = window.devicePixelRatio || 1;
+  cv.style.width = avail + "px"; cv.style.height = Hpx + "px";
+  cv.width = Math.round(avail * DPR); cv.height = Math.round(Hpx * DPR);
+  const W = cv.width, H = cv.height;
+  const roadX = W * 0.1, roadW = W * 0.8, laneN = 3;
+  const carW = roadW * 0.24, carH = carW * 1.7, py = H * 0.8;
+  const laneX = i => roadX + roadW * ((i + 0.5) / laneN);
+  const ENEMY_COLS = ["#e5484d", "#2481cc", "#d98a00", "#8e44ad", "#16a085", "#e67e22"];
+  const css = getComputedStyle(document.documentElement), CC = n => (css.getPropertyValue(n) || "").trim();
+  const brand = CC("--brand") || "#0ea47f", grass = "#2f6b3d", roadCol = "#3a3f46", lane = "#eceff3";
+  let px, enemies, scroll, speed, score, dist, spawnT, playing, loop = null;
+  const held = { left: false, right: false };
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); ctx.fill(); };
+
+  function reset() {
+    px = W / 2; enemies = []; scroll = 0; speed = H * 0.012; score = 0; dist = 0; spawnT = 0;
+    document.getElementById("rc-score").textContent = "0"; draw();
+  }
+  function car(x, y, col, dir) {  // dir: -1 игрок (нос вверх), +1 встречная (нос вниз)
+    ctx.fillStyle = "rgba(0,0,0,.18)"; rr(x - carW / 2 + carW * 0.06, y - carH / 2 + carH * 0.06, carW, carH, carW * 0.22);
+    ctx.fillStyle = col; rr(x - carW / 2, y - carH / 2, carW, carH, carW * 0.22);
+    ctx.fillStyle = "rgba(255,255,255,.18)"; rr(x - carW * 0.4, y - carH * 0.1, carW * 0.12, carH * 0.6, carW * 0.06); // блик
+    ctx.fillStyle = "#1c2733";  // кабина/стёкла
+    rr(x - carW * 0.32, y - dir * carH * 0.18, carW * 0.64, carH * 0.24, carW * 0.08);
+    ctx.fillStyle = "#11161d";  // колёса
+    [[-0.52, -0.3], [0.52, -0.3], [-0.52, 0.3], [0.52, 0.3]].forEach(([ox, oy]) =>
+      rr(x + carW * ox - carW * 0.06, y + carH * oy, carW * 0.14, carH * 0.2, carW * 0.05));
+    ctx.fillStyle = dir < 0 ? "#ffe08a" : "#ffd23f";  // фары спереди
+    rr(x - carW * 0.3, y + dir * carH * 0.42, carW * 0.18, carH * 0.06, carW * 0.03);
+    rr(x + carW * 0.12, y + dir * carH * 0.42, carW * 0.18, carH * 0.06, carW * 0.03);
+  }
+  function draw() {
+    ctx.fillStyle = grass; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = roadCol; ctx.fillRect(roadX, 0, roadW, H);
+    ctx.fillStyle = "#d7b24a"; ctx.fillRect(roadX - W * 0.012, 0, W * 0.012, H); ctx.fillRect(roadX + roadW, 0, W * 0.012, H); // бордюры
+    ctx.fillStyle = lane;  // пунктир разметки
+    const dash = H * 0.09, gap = H * 0.07, off = scroll % (dash + gap);
+    for (let li = 1; li < laneN; li++) { const lx = roadX + roadW * (li / laneN) - W * 0.006;
+      for (let yy = -dash + off; yy < H; yy += dash + gap) rr(lx, yy, W * 0.012, dash, W * 0.006); }
+    enemies.forEach(e => car(e.x, e.y, e.col, 1));
+    car(px, py, brand, -1);
+  }
+  function spawn() {
+    const li = (Math.random() * laneN) | 0;
+    enemies.push({ x: laneX(li), y: -carH, col: ENEMY_COLS[(Math.random() * ENEMY_COLS.length) | 0] });
+  }
+  function step() {
+    speed = H * 0.012 + dist * 0.00002; if (speed > H * 0.03) speed = H * 0.03;
+    dist += speed; scroll += speed;
+    const mv = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    if (mv) px = Math.max(roadX + carW * 0.5, Math.min(roadX + roadW - carW * 0.5, px + mv * W * 0.02));
+    spawnT -= 33;
+    if (spawnT <= 0) { spawn(); spawnT = Math.max(430, 900 - score * 7); }
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i]; e.y += speed;
+      if (Math.abs(e.x - px) < carW * 0.82 && Math.abs(e.y - py) < carH * 0.86) return gameOver();
+      if (e.y > H + carH) { enemies.splice(i, 1); score++; document.getElementById("rc-score").textContent = score; }
+    }
+    draw();
+  }
+  function start() {
+    reset(); playing = true;
+    document.getElementById("rc-over").classList.remove("on");
+    if (loop) clearInterval(loop); loop = setInterval(step, 33); timers.push(loop);
+  }
+  function gameOver() {
+    if (loop) clearInterval(loop); loop = null; playing = false; haptic("error");
+    if (score > best) { best = score; try { localStorage.setItem("race_best", best); } catch (e) {}
+      document.getElementById("rc-best").textContent = best; }
+    document.getElementById("rc-msg").textContent = R.over;
+    document.getElementById("rc-sub").textContent = `${R.score}: ${score} · ${R.best}: ${best}`;
+    document.getElementById("rc-go").textContent = R.again;
+    document.getElementById("rc-over").classList.add("on");
+  }
+  $app.querySelectorAll(".rc-b").forEach(btn => {
+    const k = btn.dataset.k;
+    const dn = e => { e.preventDefault(); held[k] = true; };
+    const up = e => { e.preventDefault(); held[k] = false; };
+    btn.addEventListener("pointerdown", dn); btn.addEventListener("pointerup", up);
+    btn.addEventListener("pointerleave", up); btn.addEventListener("pointercancel", up);
+  });
+  on("#rc-go", "click", start);
   reset();
 }
 

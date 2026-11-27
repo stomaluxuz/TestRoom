@@ -497,3 +497,11 @@ body { background:
   font-size: 22px; box-shadow: var(--card-shadow); cursor: pointer; user-select: none; touch-action: none; }
 .fa-b:active { background: var(--bg2); transform: scale(.94); }
 .fa-b.p { color: #e5484d; } .fa-b.k { color: #d98a00; } .fa-b.bl { color: #2481cc; } .fa-b.sp { color: var(--brand); }
+
+/* ===== Гонка ===== */
+.rc-stage { position: relative; display: flex; justify-content: center; }
+#rc { border-radius: 16px; display: block; touch-action: none; box-shadow: var(--card-shadow); }
+.rc-ctl { display: flex; gap: 12px; margin-top: 16px; }
+.rc-b { flex: 1; height: 60px; border: 0; border-radius: 16px; background: var(--bg); color: var(--brand);
+  font-size: 26px; box-shadow: var(--card-shadow); cursor: pointer; user-select: none; touch-action: none; }
+.rc-b:active { background: var(--brand-soft); transform: scale(.97); }
