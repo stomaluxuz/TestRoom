@@ -393,3 +393,45 @@ body { background:
 .opt2.ok { border-color: var(--ok); background: rgba(47,168,79,.12); }
 .opt2.bad { border-color: var(--danger); background: rgba(229,72,77,.12); }
 .opt2:disabled { cursor: default; }
+
+/* ===== Премиум-экран прохождения теста (экзамен) и практики с сеткой ===== */
+.ts-head { background: var(--bg); border-radius: 18px; padding: 14px; margin-bottom: 14px; box-shadow: var(--card-shadow); }
+.ts-head-top { display: flex; align-items: center; gap: 10px; }
+.ts-ic { width: 38px; height: 38px; border-radius: 11px; background: var(--brand-soft); color: var(--brand);
+  display: flex; align-items: center; justify-content: center; font-size: 19px; flex: none; }
+.ts-ic svg { width: 21px; height: 21px; }
+.ts-flag svg { width: 19px; height: 19px; display: block; margin: 0 auto; }
+.ts-meta { flex: 1; min-width: 0; }
+.ts-meta b { display: block; font-size: 15px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-timer { background: var(--brand-soft); color: var(--brand); border-radius: 20px; padding: 5px 11px; font-size: 14px; flex: none; }
+.ts-timer.low { background: rgba(229,72,77,.14); color: var(--danger); }
+.ts-flag { flex: none; width: 38px; height: 38px; border-radius: 11px; border: 0; background: var(--bg2);
+  color: var(--hint); font-size: 17px; cursor: pointer; line-height: 1; }
+.ts-flag.on { background: rgba(217,138,0,.16); color: var(--warn); }
+.ts-progwrap { display: flex; align-items: center; gap: 9px; margin-top: 13px; }
+.ts-prog { height: 7px; background: var(--bg2); border-radius: 6px; overflow: hidden; flex: 1; }
+.ts-prog span { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--brand-2)); border-radius: 6px; transition: width .3s; }
+.ts-progn { font-size: 12px; color: var(--hint); font-variant-numeric: tabular-nums; flex: none; }
+.ts-nav { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+.ts-n { position: relative; width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center;
+  justify-content: center; font-size: 14px; font-weight: 600; background: var(--bg2); color: var(--hint); user-select: none; }
+.ts-n.done { background: var(--brand-soft); color: var(--brand); }
+.ts-n.cur { background: var(--brand); color: #fff; box-shadow: 0 2px 8px rgba(14,164,127,.4); }
+.ts-n.tap { cursor: pointer; transition: transform .1s; }
+.ts-n.tap:active { transform: scale(.9); }
+.ts-n.flag::after { content: ""; position: absolute; top: -3px; right: -3px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--warn); border: 2px solid var(--bg); }
+.ts-q { font-size: 17px; font-weight: 600; line-height: 1.4; margin: 4px 2px 14px; white-space: pre-wrap; }
+.ts-opts .option { display: flex; align-items: center; gap: 12px; border-radius: 16px; padding: 14px;
+  margin-bottom: 10px; box-shadow: var(--card-shadow); border: 2px solid transparent; }
+.ts-badge { width: 30px; height: 30px; border-radius: 50%; background: var(--brand-soft); color: var(--brand);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex: none; }
+.ts-opts .option.selected { border-color: var(--brand); background: var(--brand-soft); }
+.ts-opts .option.selected .ts-badge { background: var(--brand); color: #fff; }
+.ts-opts .option.correct { border-color: var(--ok); background: rgba(47,168,79,.14); }
+.ts-opts .option.correct .ts-badge { background: var(--ok); color: #fff; }
+.ts-opts .option.wrong { border-color: var(--danger); background: rgba(229,72,77,.12); }
+.ts-opts .option.wrong .ts-badge { background: var(--danger); color: #fff; }
+.ts-foot { display: flex; gap: 10px; margin-top: 6px; }
+.ts-foot .btn { margin: 0; flex: 1; }
+.ts-foot .ts-prev { flex: 0 0 40%; }

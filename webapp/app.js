@@ -1222,6 +1222,8 @@ const ICONS = {
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>',
+  clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1H9z"/><path d="M8.5 13l2.2 2.2L15.5 10"/>',
+  flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22V15"/>',
 };
 function svgIcon(name) {
   const p = ICONS[name] || ICONS.book;
@@ -1515,34 +1517,89 @@ async function topicScreen({ id }) {
     });
     on("#test", "click", startTest);
   }
+  // Практика (не экзамен): сетка номеров со свободным переходом и сменой ответа —
+  // как «Практика» в референсе. Разбор правильных показываем в конце (можно менять ответы до «Завершить»).
+  const PRAC = {
+    ru: { prev: "‹ Назад", next: "Далее ›", finish: "Завершить практику", answered: "Отвечено",
+      confirm: "Завершить? Без ответа: {n}." },
+    uz: { prev: "‹ Orqaga", next: "Keyingi ›", finish: "Mashqni yakunlash", answered: "Javob berildi",
+      confirm: "Yakunlaymizmi? Javobsiz: {n}." },
+    en: { prev: "‹ Back", next: "Next ›", finish: "Finish practice", answered: "Answered",
+      confirm: "Finish? Unanswered: {n}." },
+  };
   function startTest() {
-    const qs = d.questions; let i = 0, correct = 0;
+    const qs = d.questions;
+    const chosen = new Array(qs.length).fill(null);  // выбранный индекс ответа или null
+    const flags = new Array(qs.length).fill(false);  // «отмечено» для возврата
+    const L = PRAC[LANG] || PRAC.ru;
+    let cur = 0;
     drawQ();
     function drawQ() {
-      const q = qs[i];
-      $app.innerHTML = `<p class="muted small">${i + 1} / ${qs.length}</p>
-        <div class="qbody">${esc(q.q)}</div>
-        <div class="qopts2" id="opts">${q.options.map((o, oi) => `<button class="opt2" data-i="${oi}">${esc(o)}</button>`).join("")}</div>`;
-      onAll("#opts .opt2", "click", el => {
-        const pick = +el.dataset.i, ok = pick === q.correct;
-        if (ok) correct++;
-        $app.querySelectorAll(".opt2").forEach((b, bi) => {
-          b.disabled = true;
-          if (bi === q.correct) b.classList.add("ok"); else if (bi === pick) b.classList.add("bad");
-        });
-        haptic(ok ? "success" : "error");
-        const nxt = document.createElement("button");
-        nxt.className = "btn"; nxt.style.marginTop = "12px";
-        nxt.textContent = i < qs.length - 1 ? t("next_q") : t("finish_test");
-        nxt.onclick = () => { i++; (i < qs.length) ? drawQ() : finishTest(); };
-        $app.appendChild(nxt);
+      const q = qs[cur];
+      const ansN = chosen.filter(x => x !== null).length;
+      const nav = qs.map((_, k) => {
+        let c = "ts-n tap";
+        if (k === cur) c += " cur"; else if (chosen[k] !== null) c += " done";
+        if (flags[k]) c += " flag";
+        return `<span class="${c}" data-k="${k}">${k + 1}</span>`;
+      }).join("");
+      $app.innerHTML = `
+        <div class="ts-head">
+          <div class="ts-head-top">
+            <div class="ts-ic">${svgIcon("book")}</div>
+            <div class="ts-meta"><b>${esc(d.title)}</b><span class="muted small">${L.answered}: ${ansN}/${qs.length}</span></div>
+            <button class="ts-flag ${flags[cur] ? "on" : ""}" id="flag" aria-label="flag">${svgIcon("flag")}</button>
+          </div>
+          <div class="ts-progwrap">
+            <div class="ts-prog"><span style="width:${Math.round(ansN * 100 / qs.length)}%"></span></div>
+            <span class="ts-progn">${cur + 1}/${qs.length}</span>
+          </div>
+          <div class="ts-nav" id="nav">${nav}</div>
+        </div>
+        <div class="ts-q">${esc(q.q)}</div>
+        <div class="ts-opts" id="opts">
+          ${q.options.map((o, oi) => `<div class="option ${chosen[cur] === oi ? "selected" : ""}" data-i="${oi}"><span class="ts-badge">${String.fromCharCode(65 + oi)}</span><span>${esc(o)}</span></div>`).join("")}
+        </div>
+        <div class="ts-foot">
+          <button class="btn secondary ts-prev" id="prev" ${cur === 0 ? "disabled" : ""}>${L.prev}</button>
+          ${cur < qs.length - 1
+            ? `<button class="btn" id="next">${L.next}</button>`
+            : `<button class="btn" id="finish">${L.finish}</button>`}
+        </div>`;
+      onAll("#opts .option", "click", el => {
+        chosen[cur] = +el.dataset.i;
+        $app.querySelectorAll("#opts .option").forEach(b => b.classList.toggle("selected", b === el));
+        const slot = $app.querySelector(`#nav .ts-n[data-k="${cur}"]`);
+        if (slot && !slot.classList.contains("cur")) slot.classList.add("done");
       });
+      onAll("#nav .ts-n", "click", el => { cur = +el.dataset.k; drawQ(); });
+      on("#flag", "click", () => { flags[cur] = !flags[cur]; drawQ(); });
+      on("#prev", "click", () => { if (cur > 0) { cur--; drawQ(); } });
+      on("#next", "click", () => { if (cur < qs.length - 1) { cur++; drawQ(); } });
+      on("#finish", "click", finishTest);
     }
     async function finishTest() {
+      const left = chosen.filter(x => x === null).length;
+      if (left && !confirm(L.confirm.replace("{n}", left))) return;
+      let correct = 0;
+      qs.forEach((q, k) => { if (chosen[k] === q.correct) correct++; });
       try { await api(`/api/courses/topics/${id}/test`, { json: { correct, total: qs.length } }); } catch (e) {}
       d.best_correct = correct; d.best_total = qs.length;
+      const review = qs.map((q, k) => {
+        const pick = chosen[k];
+        const opts = q.options.map((o, oi) => {
+          let cls = "mkopt";
+          if (oi === q.correct) cls += " ok"; else if (oi === pick) cls += " bad";
+          const tag = oi === q.correct ? ` <b class="mktag ok">✓ ${t("correct_answer")}</b>`
+            : (oi === pick ? ` <b class="mktag bad">✗ ${t("your_answer")}</b>` : "");
+          return `<div class="${cls}">${esc(o)}${tag}</div>`;
+        }).join("");
+        return `<div class="card"><div style="font-weight:600;margin-bottom:8px">${k + 1}. ${esc(q.q)}</div>${opts}</div>`;
+      }).join("");
       $app.innerHTML = `<div class="verdict ${correct / qs.length >= 0.6 ? "ok" : "bad"}">${t("topic_test_done")}: ${correct} / ${qs.length}</div>
+        ${review}
         <button class="btn" id="again">${t("take_test")}</button><button class="btn secondary" id="back">${t("back_home")}</button>`;
+      haptic("success");
       on("#again", "click", startTest);
       on("#back", "click", drawTheory);
     }
@@ -1561,16 +1618,25 @@ function attemptScreen({ state }) {
   const rules = (q.number === 1 && !state.solo)
     ? `<div class="warnbox">⚠️ <b>${t("rules")}</b> ${t("rules_text")}</div>`
     : "";
+  // Экзамен — анти-чит: сервер отдаёт по одному вопросу, назад нельзя, прыжков НЕТ.
+  // Шапка: иконка + таймер-пилюля + сплошная полоса прогресса (без сетки-навигатора).
   render(`
-    <div class="row small"><span class="muted">${esc(state.subject)} · ${esc(state.test_title)}</span></div>
-    <div class="row" style="margin-top:6px">
-      <span>${t("question")} ${q.number} ${t("of")} ${state.total}</span>
-      <span class="timer" id="timer">⏱ ${fmtTime(state.seconds_left)}</span>
+    <div class="ts-head">
+      <div class="ts-head-top">
+        <div class="ts-ic">${svgIcon("clipboard")}</div>
+        <div class="ts-meta"><b>${esc(state.test_title)}</b><span class="muted small">${esc(state.subject)}</span></div>
+        <span class="timer ts-timer" id="timer">⏱ ${fmtTime(state.seconds_left)}</span>
+      </div>
+      <div class="ts-progwrap">
+        <div class="ts-prog"><span style="width:${Math.round(state.answered * 100 / state.total)}%"></span></div>
+        <span class="ts-progn">${t("question")} ${q.number} ${t("of")} ${state.total}</span>
+      </div>
     </div>
-    <div class="bar"><span style="width:${Math.round(state.answered * 100 / state.total)}%"></span></div>
     ${rules}${warn}
-    <div class="question">${esc(q.text)}</div>
-    ${q.options.map((o, i) => `<div class="option" data-i="${i}">${String.fromCharCode(65 + i)}) ${esc(o)}</div>`).join("")}
+    <div class="ts-q">${esc(q.text)}</div>
+    <div class="ts-opts">
+      ${q.options.map((o, i) => `<div class="option" data-i="${i}"><span class="ts-badge">${String.fromCharCode(65 + i)}</span><span>${esc(o)}</span></div>`).join("")}
+    </div>
     <button class="btn" id="answer" disabled>${t("answer")}</button>
   `);
   // Во время теста прячем подпись-ссылку на Instagram внизу — чтобы студент
