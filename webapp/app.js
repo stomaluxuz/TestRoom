@@ -3400,7 +3400,7 @@ function fightArena({ char }) {
 
   function mk(ch, x, dir) {
     return { ch, x, y: groundY, vy: 0, dir, hp: 100, state: "idle", t: 0, dur: 0, didHit: false,
-      blocking: false, blockT: 0, stun: 0, think: 0, cd: { punch: 0, kick: 0, special: 0 } };
+      blocking: false, blockT: 0, stun: 0, think: 0, moving: false, walkT: 0, cd: { punch: 0, kick: 0, special: 0 } };
   }
   let p, cpu, projs, sparks, phase, phaseT, round, winsP, winsC, timer, loop = null;
   const held = { left: false, right: false, block: false };
@@ -3456,6 +3456,7 @@ function fightArena({ char }) {
     }
   }
   function aiCPU() {
+    cpu.moving = false;
     if (cpu.stun > 0) return;
     cpu.think -= 33;
     const dist = cpu.x - p.x, ad = Math.abs(dist);
@@ -3465,14 +3466,15 @@ function fightArena({ char }) {
       else if (r < 0.2) { cpu.blocking = true; cpu.blockT = 240 + Math.random() * 220; }
       else if (r < 0.58) trigger(cpu, "kick"); else trigger(cpu, "punch");
     }
-    if (!cpu.blocking && canAct(cpu) && ad > ATK.kick.reach * 0.9) cpu.x -= Math.sign(dist) * ms * 0.72;
+    if (!cpu.blocking && canAct(cpu) && ad > ATK.kick.reach * 0.9) { cpu.x -= Math.sign(dist) * ms * 0.72; cpu.moving = true; cpu.walkT += 33; }
   }
   function player() {
+    p.moving = false;
     p.blocking = held.block && canAct(p) || (p.blocking && held.block && grounded(p) && p.stun <= 0 && p.state === "idle");
     if (p.blocking) return;
     if (canAct(p) || p.y < groundY) {
       const mv = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-      if (mv && p.stun <= 0 && p.state === "idle") p.x = Math.max(W * 0.08, Math.min(W * 0.92, p.x + mv * ms));
+      if (mv && p.stun <= 0 && p.state === "idle") { p.x = Math.max(W * 0.08, Math.min(W * 0.92, p.x + mv * ms)); p.moving = true; p.walkT += 33; }
     }
   }
   function anno(txt, big) { const el = document.getElementById("fa-anno"); if (!el) return;
@@ -3507,28 +3509,88 @@ function fightArena({ char }) {
     ex.onclick = () => back();
   }
 
-  function cap(x0, y0, x1, y1, w) { ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  function shade(hex, f) {  // f<0 — темнее, f>0 — светлее
+    const n = parseInt(hex.slice(1), 16); let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const m = f < 0 ? 0 : 255, a = Math.abs(f);
+    r = Math.round(r + (m - r) * a); g = Math.round(g + (m - g) * a); b = Math.round(b + (m - b) * a);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+  function seg(ax, ay, bx, by, ex, ey, w1, w2, endR, col, endCol) {  // двусегментная конечность с суставом
+    ctx.strokeStyle = col; ctx.lineCap = "round";
+    ctx.lineWidth = w1; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.lineWidth = w2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(ex, ey); ctx.stroke();
+    if (endR) { ctx.fillStyle = endCol || col; ctx.beginPath(); ctx.arc(ex, ey, endR, 0, 7); ctx.fill(); }
+  }
   function drawFighter(f) {
-    const F = FIGHTERS[f.ch], feetY = f.y, topY = feetY - fh, cxp = f.x, d = f.dir;
-    const act = f.state, on = (t0, t1) => f.t >= t0 && f.t <= t1;
-    ctx.fillStyle = "rgba(0,0,0,.14)"; ctx.beginPath();
-    ctx.ellipse(cxp, groundY + hw * 0.2, hw * 1.7, hw * 0.45, 0, 0, 7); ctx.fill();
-    ctx.strokeStyle = F.color; ctx.lineCap = "round";
-    const hipY = topY + fh * 0.6, shY = topY + fh * 0.36;
-    cap(cxp - d * hw * 0.35, hipY, cxp - d * hw * 0.35, feetY, hw * 0.85);          // задняя нога
-    if (act === "kick" && on(ATK.kick.a0, ATK.kick.a1)) cap(cxp, hipY, cxp + d * fh * 0.52, hipY - fh * 0.04, hw * 0.85);
-    else cap(cxp + d * hw * 0.35, hipY, cxp + d * hw * 0.35, feetY, hw * 0.85);     // передняя нога
-    ctx.fillStyle = F.color; ctx.beginPath();                                       // торс
-    if (ctx.roundRect) ctx.roundRect(cxp - hw, shY, hw * 2, fh * 0.3, hw); else ctx.rect(cxp - hw, shY, hw * 2, fh * 0.3);
+    const F = FIGHTERS[f.ch], d = f.dir, act = f.state;
+    const on = (a, b) => f.t >= a && f.t <= b;
+    const feetY = f.y, cxp = f.x;
+    const bob = Math.sin(Date.now() / 300 + (f === cpu ? 1.3 : 0)) * fh * 0.012;
+    const crouch = (act === "block" || f.blocking) ? fh * 0.04 : 0;
+    const topY = feetY - fh + crouch;
+    const shY = topY + fh * 0.32 + bob, hipY = topY + fh * 0.62, waistY = shY + (hipY - shY) * 0.52;
+    const shW = hw * 1.18, waistW = hw * 0.82, hipW = hw * 1.02;
+    const bodyGrad = ctx.createLinearGradient(0, shY - fh * 0.06, 0, hipY);
+    bodyGrad.addColorStop(0, shade(F.color, 0.16)); bodyGrad.addColorStop(1, shade(F.color, -0.1));
+    const limbCol = shade(F.color, -0.08), fistCol = shade(F.color, -0.26), shortCol = shade(F.color, -0.32);
+    const air = f.y < groundY - 0.5, wob = f.moving ? Math.sin(f.walkT / 90) : 0;
+    const legW = hw * 0.9, backArmW = hw * 0.62, frontArmW = hw * 0.78;
+    // тень
+    ctx.fillStyle = "rgba(0,0,0,.16)"; ctx.beginPath();
+    ctx.ellipse(cxp, groundY + hw * 0.2, hw * 1.7, hw * 0.42, 0, 0, 7); ctx.fill();
+    // ЗАДНЯЯ рука
+    seg(cxp - d * hw * 0.3, shY + fh * 0.03, cxp - d * hw * 0.6, shY + fh * 0.18, cxp - d * hw * 0.45, hipY - fh * 0.02,
+      backArmW, backArmW * 0.85, hw * 0.4, limbCol, fistCol);
+    // ЗАДНЯЯ нога (бедро + голень)
+    { let fx = cxp - d * hw * 0.4, fy = feetY;
+      if (air) { fx = cxp - d * hw * 0.55; fy = feetY - fh * 0.14; }
+      else if (f.moving) fx = cxp - d * hw * 0.4 - wob * fh * 0.14;
+      seg(cxp - d * hw * 0.32, hipY, (cxp - d * hw * 0.32 + fx) / 2, (hipY + fy) / 2 + fh * 0.03, fx, fy,
+        legW, legW * 0.82, hw * 0.52, limbCol, shade(F.color, -0.16)); }
+    // ТОРС (мускулистый силуэт: плечи → талия → бёдра)
+    ctx.fillStyle = bodyGrad; ctx.beginPath();
+    ctx.moveTo(cxp - shW, shY);
+    ctx.quadraticCurveTo(cxp - (shW + waistW) / 2 * 1.06, (shY + waistY) / 2, cxp - waistW, waistY);
+    ctx.quadraticCurveTo(cxp - hipW, (waistY + hipY) / 2 + fh * 0.02, cxp - hipW, hipY);
+    ctx.lineTo(cxp + hipW, hipY);
+    ctx.quadraticCurveTo(cxp + hipW, (waistY + hipY) / 2 + fh * 0.02, cxp + waistW, waistY);
+    ctx.quadraticCurveTo(cxp + (shW + waistW) / 2 * 1.06, (shY + waistY) / 2, cxp + shW, shY);
+    ctx.quadraticCurveTo(cxp, shY - fh * 0.07, cxp - shW, shY);
+    ctx.closePath(); ctx.fill();
+    // плечи-дельты
+    ctx.fillStyle = shade(F.color, 0.05);
+    [-1, 1].forEach(s => { ctx.beginPath(); ctx.arc(cxp + s * shW * 0.82, shY + fh * 0.02, hw * 0.5, 0, 7); ctx.fill(); });
+    // грудь (блик) + линия пресса
+    ctx.globalAlpha = 0.45; ctx.fillStyle = shade(F.color, 0.24);
+    ctx.beginPath(); ctx.ellipse(cxp, shY + fh * 0.07, hw * 0.72, fh * 0.05, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.33; ctx.strokeStyle = shade(F.color, -0.22); ctx.lineCap = "round"; ctx.lineWidth = hw * 0.12;
+    ctx.beginPath(); ctx.moveTo(cxp, shY + fh * 0.13); ctx.lineTo(cxp, waistY + fh * 0.02); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // ПЕРЕДНЯЯ нога
+    { let kx = cxp + d * hw * 0.45, ky = hipY + fh * 0.2, fx = cxp + d * hw * 0.45, fy = feetY;
+      if (act === "kick" && on(ATK.kick.a0, ATK.kick.a1)) { kx = cxp + d * fh * 0.3; ky = hipY - fh * 0.02; fx = cxp + d * fh * 0.56; fy = hipY - fh * 0.08; }
+      else if (air) { kx = cxp + d * hw * 0.25; ky = hipY + fh * 0.12; fx = cxp + d * hw * 0.55; fy = feetY - fh * 0.14; }
+      else if (f.moving) { fx = cxp + d * hw * 0.45 + wob * fh * 0.14; ky = hipY + fh * 0.18; }
+      seg(cxp + d * hw * 0.32, hipY, kx, ky, fx, fy, legW, legW * 0.82, hw * 0.52, F.color, shade(F.color, -0.16)); }
+    // ШОРТЫ (поверх бёдер) + пояс — «настоящий» боец
+    ctx.fillStyle = shortCol; ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(cxp - hipW * 1.06, hipY - fh * 0.05, hipW * 2.12, fh * 0.14, hw * 0.35);
+    else ctx.rect(cxp - hipW * 1.06, hipY - fh * 0.05, hipW * 2.12, fh * 0.14);
     ctx.fill();
-    cap(cxp - d * hw * 0.5, shY + fh * 0.02, cxp - d * hw * 1.0, shY + fh * 0.14, hw * 0.72);  // задняя рука
-    if (act === "punch" && on(ATK.punch.a0, ATK.punch.a1)) cap(cxp, shY, cxp + d * fh * 0.44, shY, hw * 0.72);
-    else if (f.blocking) cap(cxp + d * hw * 0.2, shY - fh * 0.04, cxp + d * hw * 0.95, shY + fh * 0.02, hw * 0.78);
-    else cap(cxp + d * hw * 0.5, shY + fh * 0.02, cxp + d * hw * 1.0, shY + fh * 0.14, hw * 0.72);
-    ctx.font = (fh * 0.42 | 0) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(F.emoji, cxp, topY + fh * 0.17);
+    ctx.fillStyle = shade(F.color, 0.12); ctx.fillRect(cxp - hipW * 1.06, hipY - fh * 0.055, hipW * 2.12, fh * 0.025);
+    // ПЕРЕДНЯЯ рука
+    { let ex = cxp + d * hw * 0.6, ey = shY + fh * 0.18, wx = cxp + d * hw * 0.46, wy = hipY - fh * 0.02;
+      if (act === "punch" && on(ATK.punch.a0, ATK.punch.a1)) { ex = cxp + d * fh * 0.25; ey = shY; wx = cxp + d * fh * 0.49; wy = shY; }
+      else if (act === "block" || f.blocking) { ex = cxp + d * hw * 0.5; ey = shY + fh * 0.04; wx = cxp + d * hw * 0.3; wy = shY - fh * 0.1; }
+      else if (f.moving) wx = cxp + d * hw * 0.46 - wob * fh * 0.1;
+      seg(cxp + d * hw * 0.28, shY + fh * 0.03, ex, ey, wx, wy, frontArmW, frontArmW * 0.85, hw * 0.5, F.color, fistCol); }
+    // ГОЛОВА = орган-фигурка (без лица), сидит на плечах
+    const lean = f.stun > 0 ? -d * fh * 0.05 : 0;
+    ctx.font = (fh * 0.46 | 0) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.fillText(F.emoji, cxp + lean, shY - fh * 0.02 + bob);
+    // щит при блоке
     if (f.blocking) { ctx.strokeStyle = "rgba(90,141,238,.7)"; ctx.lineWidth = hw * 0.4;
-      ctx.beginPath(); ctx.arc(cxp + d * hw * 1.1, shY + fh * 0.06, fh * 0.26, -1, 1); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(cxp + d * hw * 1.2, shY + fh * 0.1, fh * 0.26, -1, 1); ctx.stroke(); }
   }
   function draw() {
     const sky = ctx.createLinearGradient(0, 0, 0, H);
