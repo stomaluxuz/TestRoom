@@ -3268,7 +3268,7 @@ function snakeScreen() {
   }
   function reset() {
     snake = [{ x: 7, y: 8 }, { x: 6, y: 8 }, { x: 5, y: 8 }];
-    dir = { x: 1, y: 0 }; nextDir = dir; score = 0; speed = 160; ticks = 0;
+    dir = { x: 1, y: 0 }; nextDir = dir; score = 0; speed = 210; ticks = 0;
     document.getElementById("sk-score").textContent = "0"; placeFood(); draw();
   }
   function restartLoop() { if (loop) clearInterval(loop); loop = setInterval(step, speed); timers.push(loop); }
@@ -3280,7 +3280,7 @@ function snakeScreen() {
     snake.unshift(head);
     if (head.x === food.x && head.y === food.y) {
       score++; document.getElementById("sk-score").textContent = score; haptic("light");
-      if (score % 5 === 0 && speed > 70) { speed -= 12; restartLoop(); }
+      if (score % 5 === 0 && speed > 130) { speed -= 8; restartLoop(); }
       placeFood();
     } else snake.pop();
     draw();
