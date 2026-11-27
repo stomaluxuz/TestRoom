@@ -3377,7 +3377,7 @@ function raceScreen() {
   const rr = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); ctx.fill(); };
 
   function reset() {
-    px = W / 2; enemies = []; scroll = 0; speed = H * 0.012; score = 0; dist = 0; spawnT = 0;
+    px = W / 2; enemies = []; scroll = 0; speed = H * 0.018; score = 0; dist = 0; spawnT = 0;
     document.getElementById("rc-score").textContent = "0"; draw();
   }
   function car(x, y, col, dir) {  // dir: -1 игрок (нос вверх), +1 встречная (нос вниз)
@@ -3409,12 +3409,12 @@ function raceScreen() {
     enemies.push({ x: laneX(li), y: -carH, col: ENEMY_COLS[(Math.random() * ENEMY_COLS.length) | 0] });
   }
   function step() {
-    speed = H * 0.012 + dist * 0.00002; if (speed > H * 0.03) speed = H * 0.03;
+    speed = H * 0.018 + dist * 0.00003; if (speed > H * 0.048) speed = H * 0.048;
     dist += speed; scroll += speed;
     const mv = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-    if (mv) px = Math.max(roadX + carW * 0.5, Math.min(roadX + roadW - carW * 0.5, px + mv * W * 0.02));
+    if (mv) px = Math.max(roadX + carW * 0.5, Math.min(roadX + roadW - carW * 0.5, px + mv * W * 0.027));
     spawnT -= 33;
-    if (spawnT <= 0) { spawn(); spawnT = Math.max(430, 900 - score * 7); }
+    if (spawnT <= 0) { spawn(); spawnT = Math.max(360, 760 - score * 7); }
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i]; e.y += speed;
       if (Math.abs(e.x - px) < carW * 0.82 && Math.abs(e.y - py) < carH * 0.86) return gameOver();
