@@ -176,6 +176,8 @@ def parse(text: str) -> tuple[str, str, list[dict]]:
                 continue
             if s.lower().startswith("img:"):  # запрос фото для слайда
                 cur["img"] = s[4:].strip()
+            elif s.lower().startswith("cap:"):  # подпись «что на фото» (ИИ написал её в тексте — бесплатно)
+                cur["img_caption"] = s[4:].strip()
             else:
                 cur["bullets"].append(_clean(raw))
         else:
@@ -461,7 +463,7 @@ async def build_presentation(
                              + [sl.get("img", "") for sl in slides])
             domain = detect_domain(probe)
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            await illustrate_slides(slides, domain, client, max_per_slide=max_per_slide)
+            await illustrate_slides(slides, domain, client, max_per_slide=max_per_slide, lang=lang)
     from . import themes  # тематическое оформление: цвет подбирается авто по теме + бренд TestRoom
     # Сборка .pptx (python-pptx) — тяжёлая синхронная работа; уводим в поток, чтобы не
     # блокировать event loop (иначе на время сборки «подвисают» бот и приложение для всех).

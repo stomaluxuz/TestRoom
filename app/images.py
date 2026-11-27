@@ -293,7 +293,8 @@ async def gather_candidates(query: str, domain: str, client, limit: int = 6,
     return out
 
 
-async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_slide: int = 1) -> None:
+async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_slide: int = 1,
+                            lang: str = "ru") -> None:
     """Для слайдов с запросом img подбирает картинки и кладёт их в sl['images'] (list[bytes]).
 
     Выбор лучшей — зрением Claude (choose_slide_images). Параллельно, но с ограничением,
@@ -338,7 +339,8 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
                 picked = []  # зрение недоступно — лучше слайд без фото, чем картинка «не в тему»
             # picked ПУСТОЙ = зрение забраковало всё (не по теме) → слайд без фото (не «собака»).
             sl["_approved"] = [
-                (cands[i]["data"], cands[i].get("ah"), cands[i].get("caption", ""), cands[i].get("source", ""))
+                (cands[i]["data"], cands[i].get("ah"), cands[i].get("caption", ""),
+                 cands[i].get("source", ""), cands[i].get("vb64", ""))
                 for i in picked
             ]
 
@@ -358,9 +360,12 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
     used: list[int] = []
     for sl in targets:
         imgs, metas = [], []
+        # Подпись «что на фото» для веб-фото — из текста слайда (ИИ написал её в строке CAP:),
+        # поэтому БЕСПЛАТНО (без отдельного запроса к зрению). У книжных фигур своя подпись.
+        slide_cap = (sl.get("img_caption") or "").strip()
         for item in sl.pop("_approved", []):
             data, ah = item[0], item[1]
-            cap = item[2] if len(item) > 2 else ""
+            cap = item[2] if len(item) > 2 else ""      # подпись книжной фигуры (если это она)
             src = item[3] if len(item) > 3 else ""
             if len(imgs) >= max_per_slide:
                 break
@@ -369,7 +374,7 @@ async def illustrate_slides(slides: list[dict], domain: str, client, *, max_per_
             if ah is not None:
                 used.append(ah)
             imgs.append(data)
-            metas.append({"caption": cap, "source": src})
+            metas.append({"caption": cap or slide_cap, "source": src})
         if imgs:
             sl["images"] = imgs
-            sl["image_src"] = metas  # подпись (что это) + источник (книга) для каждой картинки
+            sl["image_src"] = metas  # подпись (что это) + источник (книга/сайт) для каждой картинки

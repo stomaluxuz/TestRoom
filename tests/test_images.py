@@ -79,6 +79,44 @@ async def test_illustrate_slides_uses_vision_pick(monkeypatch):
     assert "images" not in slides[1]  # слайд без img не трогаем
 
 
+async def test_illustrate_slides_captions_web_photo_from_slide_text(monkeypatch):
+    # веб-фото без подписи книги → подпись «что на фото» берётся из текста слайда (CAP:), БЕЗ зрения
+    async def fake_gather(query, domain, client, limit=6, hint=None, source_funcs=None):
+        return [{"url": "u1", "source": "Wikimedia Commons", "data": b"A", "vb64": "QQ==", "ah": 1}]
+
+    async def fake_choose(title, bullets, cands, want=1):
+        return [0]
+
+    async def boom_describe(b64, lang="ru", brief=False):
+        raise AssertionError("describe_image не должен вызываться — подпись бесплатная, из текста слайда")
+
+    monkeypatch.setattr(images, "gather_candidates", fake_gather)
+    monkeypatch.setattr(ai, "choose_slide_images", fake_choose)
+    monkeypatch.setattr(ai, "describe_image", boom_describe)
+    slides = [{"title": "T", "bullets": ["b"], "img": "q", "img_caption": "Yurak anatomiyasi"}]
+    await images.illustrate_slides(slides, "medical", client=None, max_per_slide=1, lang="uz")
+    assert slides[0]["images"] == [b"A"]
+    # под фото: «что на фото» (из текста) + источник
+    assert slides[0]["image_src"][0]["caption"] == "Yurak anatomiyasi"
+    assert slides[0]["image_src"][0]["source"] == "Wikimedia Commons"
+
+
+async def test_illustrate_slides_keeps_book_figure_caption(monkeypatch):
+    # у книжной фигуры своя подпись (из индексации) → она приоритетнее подписи из текста слайда
+    async def fake_gather(query, domain, client, limit=6, hint=None, source_funcs=None):
+        return [{"url": "u1", "source": "Атлас Синельников", "data": b"A", "vb64": "QQ==",
+                 "ah": 1, "caption": "Готовая подпись из книги"}]
+
+    async def fake_choose(title, bullets, cands, want=1):
+        return [0]
+
+    monkeypatch.setattr(images, "gather_candidates", fake_gather)
+    monkeypatch.setattr(ai, "choose_slide_images", fake_choose)
+    slides = [{"title": "T", "bullets": ["b"], "img": "q", "img_caption": "из текста слайда"}]
+    await images.illustrate_slides(slides, "medical", client=None, max_per_slide=1, lang="ru")
+    assert slides[0]["image_src"][0]["caption"] == "Готовая подпись из книги"
+
+
 async def test_illustrate_slides_skips_when_vision_rejects_all(monkeypatch):
     async def fake_gather(query, domain, client, limit=6, hint=None, source_funcs=None):
         return [{"url": "u1", "source": "s", "data": b"X", "vb64": "WA==", "ah": 1}]

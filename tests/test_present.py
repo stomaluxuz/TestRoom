@@ -27,6 +27,14 @@ def test_parse_img_query():
     assert slides[0]["bullets"] == ["пункт"]  # строка IMG не попала в пункты
 
 
+def test_parse_img_caption():
+    # строка CAP: — бесплатная подпись «что на фото»; в пункты не попадает
+    title, _, slides = parse("Тема\n\n# Слайд\n- пункт\nIMG: human heart\nCAP: Анатомия сердца\n")
+    assert slides[0]["img"] == "human heart"
+    assert slides[0]["img_caption"] == "Анатомия сердца"
+    assert slides[0]["bullets"] == ["пункт"]
+
+
 def test_assemble_with_image():
     slides = [{"title": "С фото", "bullets": ["пункт"], "img_bytes": PNG_1x1}]
     name, data = _assemble("Тест", "подзаголовок", slides)
