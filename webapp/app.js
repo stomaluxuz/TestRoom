@@ -3060,6 +3060,7 @@ const QUIZ = {
     games_entry: "Игры", games_title: "Игры", games_hint: "Выбери игру",
     quiz_name: "Куиз", quiz_desc: "Викторина как Kahoot: вопросы на скорость и таблица лидеров",
     mafia_name: "Мафия", mafia_desc: "Ролевая игра на логику: город против мафии",
+    snake_name: "Змейка", snake_desc: "Классика на перемену: собирай яблоки, не влетай в стену и в себя",
     soon: "Скоро", in_dev: "В разработке — скоро добавим! 🔧",
   },
   uz: {
@@ -3081,6 +3082,7 @@ const QUIZ = {
     games_entry: "O'yinlar", games_title: "O'yinlar", games_hint: "O'yinni tanlang",
     quiz_name: "Kuiz", quiz_desc: "Kahoot kabi viktorina: tezlikka savollar va peshqadamlar",
     mafia_name: "Mafiya", mafia_desc: "Mantiqqa mo'ljallangan rolli o'yin: shahar mafiyaga qarshi",
+    snake_name: "Ilon", snake_desc: "Tanaffusga klassika: olma yig', devorga va o'zingga urilma",
     soon: "Tez orada", in_dev: "Ishlanmoqda — tez orada qo'shamiz! 🔧",
   },
   en: {
@@ -3102,6 +3104,7 @@ const QUIZ = {
     games_entry: "Games", games_title: "Games", games_hint: "Pick a game",
     quiz_name: "Quiz", quiz_desc: "Kahoot-style quiz: fast answers and a leaderboard",
     mafia_name: "Mafia", mafia_desc: "Social deduction game: town vs. mafia",
+    snake_name: "Snake", snake_desc: "Classic break-time game: eat apples, don't hit walls or yourself",
     soon: "Soon", in_dev: "In development — coming soon! 🔧",
   },
 };
@@ -3140,10 +3143,12 @@ function gamesScreen() {
     <p class="muted small" style="margin:-6px 0 12px">${Q.games_hint}</p>
     ${tile("quiz", "🎯", Q.quiz_name, Q.quiz_desc, true)}
     ${tile("mafia", "🕵️", Q.mafia_name, Q.mafia_desc, true)}
+    ${tile("snake", "🐍", Q.snake_name, Q.snake_desc, true)}
   `);
   showTabs("games");
   on("#g-quiz", "click", () => go(isHost ? quizCreateScreen : quizJoinScreen));
   on("#g-mafia", "click", () => go(mafiaMenuScreen));
+  on("#g-snake", "click", () => go(snakeScreen));
 }
 
 // ---- заглушка игры «в разработке»
@@ -3157,6 +3162,166 @@ function gameSoonScreen({ emoji, name, desc }) {
       <div class="card" style="margin-top:16px">${Q.in_dev}</div>
     </div>
   `);
+}
+
+// ---- Змейка: соло-игра на перемену (canvas, без сервера; рекорд — локально)
+function snakeScreen() {
+  const SNK = {
+    ru: { title: "Змейка", score: "Счёт", best: "Рекорд", start: "Свайпай по полю или жми стрелки",
+      over: "Игра окончена", go_btn: "▶️ Старт", again: "🔄 Заново" },
+    uz: { title: "Ilon", score: "Hisob", best: "Rekord", start: "Maydonni suring yoki strelka bosing",
+      over: "O'yin tugadi", go_btn: "▶️ Start", again: "🔄 Qayta" },
+    en: { title: "Snake", score: "Score", best: "Best", start: "Swipe the board or use arrows",
+      over: "Game over", go_btn: "▶️ Start", again: "🔄 Restart" },
+  };
+  const L = SNK[LANG] || SNK.ru;
+  const COLS = 16, ROWS = 16;
+  let best = 0; try { best = +localStorage.getItem("snake_best") || 0; } catch (e) {}
+  render(`
+    ${langBar()}
+    <h1>🐍 ${L.title}</h1>
+    <div class="sk-top">
+      <span class="sk-chip">${L.score}: <b id="sk-score">0</b></span>
+      <span class="sk-chip">${L.best}: <b id="sk-best">${best}</b></span>
+      <button class="sk-pause" id="sk-pause" aria-label="pause">⏸</button>
+    </div>
+    <div class="sk-board">
+      <canvas id="sk"></canvas>
+      <div class="sk-over on" id="sk-over">
+        <div class="sk-over-t" id="sk-msg">${L.start}</div>
+        <div class="sk-over-s" id="sk-sub"></div>
+        <button class="btn" id="sk-go">${L.go_btn}</button>
+      </div>
+    </div>
+    <div class="sk-pad">
+      <button class="sk-b" data-d="up">▲</button>
+      <div class="sk-row">
+        <button class="sk-b" data-d="left">◀</button>
+        <button class="sk-b" data-d="down">▼</button>
+        <button class="sk-b" data-d="right">▶</button>
+      </div>
+    </div>
+  `);
+  showTabs("games");
+  const cv = document.getElementById("sk");
+  const ctx = cv.getContext("2d");
+  const avail = Math.min((cv.parentElement && cv.parentElement.clientWidth) || 320, 360);
+  const DPR = window.devicePixelRatio || 1;
+  cv.style.width = avail + "px"; cv.style.height = avail + "px";
+  cv.width = Math.round(avail * DPR); cv.height = Math.round(avail * DPR);
+  const cell = cv.width / COLS;
+  const css = getComputedStyle(document.documentElement);
+  const C = n => (css.getPropertyValue(n) || "").trim();
+  const brand = C("--brand") || "#0ea47f", brand2 = C("--brand-2") || "#0b7d63";
+  const boardBg = C("--bg") || "#fff", grid = C("--bg2") || "#eee", danger = C("--danger") || "#e5484d";
+  let snake, dir, nextDir, food, score, loop = null, playing = false, paused = false, speed, ticks = 0;
+
+  const fill = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); ctx.fill(); };
+  function placeFood() {
+    for (;;) { const f = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 };
+      if (!snake.some(s => s.x === f.x && s.y === f.y)) { food = f; return; } }
+  }
+  const cx = s => s.x * cell + cell / 2, cy = s => s.y * cell + cell / 2;
+  function draw() {
+    ctx.fillStyle = boardBg; fill(0, 0, cv.width, cv.height, 16 * DPR);
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(0, 0, cv.width, cv.height, 16 * DPR); else ctx.rect(0, 0, cv.width, cv.height);
+    ctx.clip();  // всё рисуем внутри скруглённого поля
+    ctx.strokeStyle = grid; ctx.lineWidth = Math.max(1, DPR * 0.7);
+    for (let i = 1; i < COLS; i++) {
+      ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, cv.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(cv.width, i * cell); ctx.stroke();
+    }
+    // яблоко: красный кружок + зелёный листик + блик
+    const ax = food.x * cell + cell / 2, ay = food.y * cell + cell / 2, ar = cell * 0.32;
+    ctx.fillStyle = danger; ctx.beginPath(); ctx.arc(ax, ay, ar, 0, 7); ctx.fill();
+    ctx.fillStyle = brand; ctx.beginPath(); ctx.ellipse(ax + ar * 0.5, ay - ar * 0.85, ar * 0.5, ar * 0.24, -0.6, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.arc(ax - ar * 0.33, ay - ar * 0.33, ar * 0.2, 0, 7); ctx.fill();
+    // змейка: гладкое тело (градиент голова→хвост), круглая голова, глаза, мелькающий язычок
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    const head = snake[0], tail = snake[snake.length - 1];
+    const g = ctx.createLinearGradient(cx(head), cy(head), cx(tail), cy(tail));
+    g.addColorStop(0, brand2); g.addColorStop(1, brand);
+    ctx.strokeStyle = g; ctx.lineWidth = cell * 0.72;
+    ctx.beginPath(); ctx.moveTo(cx(snake[0]), cy(snake[0]));
+    for (let i = 1; i < snake.length; i++) ctx.lineTo(cx(snake[i]), cy(snake[i]));
+    if (snake.length === 1) ctx.lineTo(cx(snake[0]) + 0.01, cy(snake[0]));
+    ctx.stroke();
+    const hx = cx(head), hy = cy(head), hr = cell * 0.42, dx = dir.x, dy = dir.y, px = -dy, py = dx;
+    ctx.fillStyle = brand2; ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 7); ctx.fill();
+    if ((ticks % 6) < 1) {  // раздвоенный язычок мелькает
+      ctx.strokeStyle = "#e5484d"; ctx.lineWidth = Math.max(1.5, cell * 0.06);
+      const bx = hx + dx * hr, by = hy + dy * hr, fx = hx + dx * hr * 1.8, fy = hy + dy * hr * 1.8;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(fx, fy);
+      ctx.moveTo(fx, fy); ctx.lineTo(fx + px * hr * 0.3 + dx * hr * 0.2, fy + py * hr * 0.3 + dy * hr * 0.2);
+      ctx.moveTo(fx, fy); ctx.lineTo(fx - px * hr * 0.3 + dx * hr * 0.2, fy - py * hr * 0.3 + dy * hr * 0.2);
+      ctx.stroke();
+    }
+    const ex = hx + dx * hr * 0.2, ey = hy + dy * hr * 0.2;  // глаза по направлению движения
+    for (const sgn of [1, -1]) {
+      const exx = ex + px * hr * 0.48 * sgn, eyy = ey + py * hr * 0.48 * sgn;
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(exx, eyy, hr * 0.3, 0, 7); ctx.fill();
+      ctx.fillStyle = "#15241d"; ctx.beginPath(); ctx.arc(exx + dx * hr * 0.12, eyy + dy * hr * 0.12, hr * 0.15, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function reset() {
+    snake = [{ x: 7, y: 8 }, { x: 6, y: 8 }, { x: 5, y: 8 }];
+    dir = { x: 1, y: 0 }; nextDir = dir; score = 0; speed = 160; ticks = 0;
+    document.getElementById("sk-score").textContent = "0"; placeFood(); draw();
+  }
+  function restartLoop() { if (loop) clearInterval(loop); loop = setInterval(step, speed); timers.push(loop); }
+  function step() {
+    dir = nextDir; ticks++;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS || snake.some(s => s.x === head.x && s.y === head.y))
+      return gameOver();
+    snake.unshift(head);
+    if (head.x === food.x && head.y === food.y) {
+      score++; document.getElementById("sk-score").textContent = score; haptic("light");
+      if (score % 5 === 0 && speed > 70) { speed -= 12; restartLoop(); }
+      placeFood();
+    } else snake.pop();
+    draw();
+  }
+  function start() {
+    reset(); playing = true; paused = false;
+    document.getElementById("sk-over").classList.remove("on");
+    document.getElementById("sk-pause").textContent = "⏸";
+    restartLoop();
+  }
+  function gameOver() {
+    if (loop) clearInterval(loop); loop = null; playing = false; haptic("error");
+    if (score > best) { best = score; try { localStorage.setItem("snake_best", best); } catch (e) {}
+      document.getElementById("sk-best").textContent = best; }
+    document.getElementById("sk-msg").textContent = L.over;
+    document.getElementById("sk-sub").textContent = `${L.score}: ${score} · ${L.best}: ${best}`;
+    document.getElementById("sk-go").textContent = L.again;
+    document.getElementById("sk-over").classList.add("on");
+  }
+  function setDir(d) {
+    const m = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }[d];
+    if (!m || (m.x === -dir.x && m.y === -dir.y)) return;  // нельзя развернуться на 180°
+    nextDir = m;
+  }
+  onAll(".sk-b", "click", el => { if (playing && !paused) setDir(el.dataset.d); });
+  let tx = 0, ty = 0;
+  cv.addEventListener("touchstart", e => { const t = e.touches[0]; tx = t.clientX; ty = t.clientY; }, { passive: true });
+  cv.addEventListener("touchend", e => {
+    const t = e.changedTouches[0], dx = t.clientX - tx, dy = t.clientY - ty;
+    if (Math.abs(dx) < 16 && Math.abs(dy) < 16) return;
+    if (!playing || paused) return;
+    setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+  }, { passive: true });
+  on("#sk-go", "click", start);
+  on("#sk-pause", "click", () => {
+    if (!playing) return;
+    paused = !paused;
+    if (paused) { if (loop) clearInterval(loop); loop = null; document.getElementById("sk-pause").textContent = "▶️"; }
+    else { restartLoop(); document.getElementById("sk-pause").textContent = "⏸"; }
+  });
+  reset();
 }
 
 // ---- учитель: создание куиза

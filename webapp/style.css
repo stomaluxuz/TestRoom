@@ -435,3 +435,23 @@ body { background:
 .ts-foot { display: flex; gap: 10px; margin-top: 6px; }
 .ts-foot .btn { margin: 0; flex: 1; }
 .ts-foot .ts-prev { flex: 0 0 40%; }
+
+/* ===== Змейка (соло-игра на перемену) ===== */
+.sk-top { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.sk-chip { background: var(--bg); border-radius: 12px; padding: 6px 12px; font-size: 14px; box-shadow: var(--card-shadow); }
+.sk-pause { margin-left: auto; border: 0; background: var(--bg); border-radius: 12px; padding: 6px 13px;
+  font-size: 15px; box-shadow: var(--card-shadow); cursor: pointer; }
+.sk-board { position: relative; display: flex; justify-content: center; }
+#sk { touch-action: none; border-radius: 16px; display: block; box-shadow: var(--card-shadow); }
+.sk-over { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center;
+  justify-content: center; gap: 12px; background: rgba(0,0,0,.45); border-radius: 16px; color: #fff;
+  text-align: center; padding: 20px; }
+.sk-over.on { display: flex; }
+.sk-over-t { font-size: 19px; font-weight: 700; }
+.sk-over-s { font-size: 14px; opacity: .92; }
+.sk-over .btn { width: auto; padding: 11px 24px; margin: 0; }
+.sk-pad { margin-top: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.sk-row { display: flex; gap: 8px; }
+.sk-b { width: 66px; height: 52px; border: 0; border-radius: 14px; background: var(--bg); color: var(--brand);
+  font-size: 20px; box-shadow: var(--card-shadow); cursor: pointer; }
+.sk-b:active { background: var(--brand-soft); }
