@@ -2455,7 +2455,7 @@ async function adminScreen(params = {}) {
       <div class="item" data-id="${t.id}">
         <div class="grow"><div>${esc(t.name || "без имени")}</div>
           <div class="muted small">${esc(t.info || "")}${t.kafedra ? " · " + esc(t.kafedra) : ""}${t.username ? " · @" + esc(t.username) : ""}</div>
-          <div class="muted small">тестов ${t.tests} · запусков ${t.sessions} · прохождений ${t.attempts}</div></div>
+          <div class="muted small">тестов ${t.tests} · запусков ${t.sessions} · презентаций ${t.presentations || 0} · прохождений ${t.attempts}${(t.presentations || 0) >= 2 && (t.sessions || 0) === 0 ? ' · <b style="color:var(--warn)">⚠️ только презентации</b>' : ""}</div></div>
         ${statusBadge(t)}
       </div>`).join("") : `<div class="card muted">Никого не найдено.</div>`;
     onAll("#list .item", "click", it => go(adminTeacherScreen, { t: list.find(x => x.id === +it.dataset.id) }));
@@ -2816,6 +2816,8 @@ function adminTeacherScreen({ t }) {
     try { await api(`/api/admin/teachers/${t.id}/${path}`, { json: body }); toast(msg); back(); }
     catch (e) { toast(e.message); }
   };
+  // «Только презентации»: делает презентации, но тесты студентам ни разу не запускал
+  const presOnly = (t.presentations || 0) >= 2 && (t.sessions || 0) === 0;
   render(`
     <h1>${esc(t.name || "без имени")}</h1>
     <div class="card">
@@ -2826,10 +2828,12 @@ function adminTeacherScreen({ t }) {
       <div class="kv"><span>Статус</span><span>${{ pending: "заявка", teacher: "преподаватель" }[t.status] || t.status}${t.blocked ? ", заблокирован" : ""}</span></div>
       <div class="kv"><span>Тариф</span><span>${t.is_pro_plus ? "💎 Pro+ до " + new Date(t.proplus_until + "Z").toLocaleDateString("ru-RU") : (t.plan === "pro" ? "Pro до " + new Date(t.pro_until + "Z").toLocaleDateString("ru-RU") : "бесплатный")}</span></div>
       <div class="kv"><span>Тестов / запусков</span><span>${t.tests} / ${t.sessions}</span></div>
+      <div class="kv"><span>Создано презентаций</span><span>${t.presentations || 0}</span></div>
       <div class="kv"><span>Прохождений студентами</span><span>${t.attempts}</span></div>
       <div class="kv"><span>Последний запуск</span><span>${t.last_session ? fmtDate(t.last_session) : "—"}</span></div>
       <div class="kv"><span>Зарегистрирован</span><span>${fmtDate(t.created_at)}</span></div>
     </div>
+    ${presOnly ? `<div class="warnbox">⚠️ <b>Только презентации.</b> Создано презентаций: ${t.presentations}, но тесты студентам ни разу не запускал (0 запусков). Похоже, использует Pro лишь для презентаций.</div>` : ""}
     ${t.status === "pending" ? `<button class="btn" id="ok">✅ Одобрить заявку</button><button class="btn danger" id="no">Отклонить</button>` : ""}
     ${t.status === "teacher" ? `<button class="btn" id="enter">🛠 Открыть кабинет преподавателя</button>` : ""}
     ${t.status === "teacher" ? `<label>Выдать Pro (дней)</label><input id="days" type="number" value="30" min="1"><button class="btn secondary" id="pro">⭐ Выдать Pro</button>` : ""}

@@ -123,3 +123,14 @@ async def test_admin_panel_and_act_as(client, db):
     for a in ("одобрил заявку", "выдал Pro на 30 дн.", "вошёл в кабинет", "добавил вопрос", "запустил тест", "заблокировал", "снял роль преподавателя"):
         assert a in actions, (a, actions)
     assert all(x["target"] for x in log)
+
+
+async def test_admin_teachers_presentations(db):
+    # В карточке учителя считаем созданные презентации (User.pres_total) — для контроля «только презентации»
+    t = await make_teacher(db, 7001, "Пресентатор")
+    t.pres_total = 3
+    await db.commit()
+    rows = await svc.admin_teachers(db)
+    row = next(r for r in rows if r["id"] == 7001)
+    assert row["presentations"] == 3
+    assert row["tests"] == 0 and row["sessions"] == 0  # данные для флага «только презентации»

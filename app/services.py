@@ -1937,6 +1937,7 @@ async def admin_teachers(db: AsyncSession, query: str = "", status: str = "all")
             "blocked": u.blocked,
             "is_admin": u.id in settings.admin_ids,
             "tests": tests.get(u.id, 0),
+            "presentations": u.pres_total or 0,  # всего создано презентаций (для контроля «только презентации»)
             "sessions": sessions.get(u.id, 0),
             "attempts": students.get(u.id, 0),
             "last_session": last[u.id].isoformat() if last.get(u.id) else None,
